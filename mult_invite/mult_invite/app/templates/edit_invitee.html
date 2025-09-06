@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Invitee{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white text-center py-3">
+                    <h4 class="mt-2">Edit Invitee</h4>
+                </div>
+                <div class="card-body px-4 py-4">
+
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                    {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+                    {% endwith %}
+
+                   <form method="POST" action="{{ url_for('inv.edit_invitee', org_uuid=org.uuid, id=invitee.id) }}">
+                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <div class="form-floating mb-3">
+                            <input type="text" class="form-control" id="name" name="name" value="{{ invitee.name }}" required>
+                            <label for="name">Name</label>
+                        </div>
+
+                <div class="form-floating mb-3">
+                    <select class="form-select" id="position" name="position" required>
+                        <option value="">Select Position</option>
+                        <option value="Attendee" {% if invitee.position=='Attendee' %}selected{% endif %}>Attendee</option>
+                        <option value="Volunteer" {% if invitee.position=='Volunteer' %}selected{% endif %}>Volunteer</option>
+                        <option value="Guest" {% if invitee.position=='Guest' %}selected{% endif %}>Guest</option>
+                      </select>
+                    <label for="position">Position</label>
+                </div>
+
+                        <div class="form-floating mb-3">
+                            <input type="text" class="form-control" id="phone_number" name="phone_number" value="{{ invitee.phone_number }}" required>
+                            <label for="phone_number">Phone Number</label>
+                        </div>
+
+                      <div class="form-floating mb-3">
+                        <select id="state" name="state" class="form-select" required>
+                          <option value="">Select State</option>
+                          {% for state in state_lgas %}
+                          <option value="{{ state }}" {% if invitee.state==state %}selected{% endif %}>{{ state }}</option>
+                          {% endfor %}
+                        </select>
+                        <label for="state">State</label>
+                      </div>
+                      
+                      <div class="form-floating mb-3">
+                        <select id="lga" name="lga" class="form-select" required>
+                          <option value="">Select LGA</option>
+                          {% if invitee.state %}
+                          {% for lga in state_lgas[invitee.state] %}
+                          <option value="{{ lga }}" {% if invitee.lga==lga %}selected{% endif %}>{{ lga }}</option>
+                          {% endfor %}
+                          {% endif %}
+                        </select>
+                        <label for="lga">LGA</label>
+                      </div>
+
+                      <div class="form-floating mb-3">
+                            <input type="text" class="form-control" id="address" name="address" value="{{ invitee.address }}">
+                            <label for="address">Address</label>
+                        </div>
+
+                        <div class="d-flex justify-content-center mt-3">
+                            <button type="submit" class="btn btn-success w-100">Save Changes</button>
+                        </div>
+                        <div class="d-flex justify-content-center mt-2">
+                            <a href="{{ url_for('inv.manage_invitee', org_uuid=org.uuid) }}" class="btn btn-secondary w-100">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+                <div class="card-footer text-center py-2">
+                    <small>Powered by <a href="https://x.com/danwebit" target="_blank"
+                            rel="noopener noreferrer">DanwebIT</a></small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const stateLgas = {{ state_lgas | tojson }};
+    const lgaSelect = document.getElementById('lga');
+    const stateSelect = document.getElementById('state');
+
+    // On page load, pre-fill LGAs if a state is already selected (e.g., during editing)
+    const initialState = stateSelect.value;
+    if (initialState && stateLgas[initialState]) {
+        lgaSelect.innerHTML = '<option value="">Select LGA</option>';
+        stateLgas[initialState].forEach(lga => {
+            const option = document.createElement('option');
+            option.value = lga;
+            option.textContent = lga;
+            if (lga === "{{ invitee.lga }}") {
+                option.selected = true;  // Preserve selected LGA
+            }
+            lgaSelect.appendChild(option);
+        });
+    }
+
+    // Handle dynamic change of state
+    stateSelect.addEventListener('change', function () {
+        const selectedState = this.value;
+        lgaSelect.innerHTML = '<option value="">Select LGA</option>';
+
+        if (selectedState && stateLgas[selectedState]) {
+            stateLgas[selectedState].forEach(lga => {
+                const option = document.createElement('option');
+                option.value = lga;
+                option.textContent = lga;
+                lgaSelect.appendChild(option);
+            });
+        } else {
+            lgaSelect.innerHTML = '<option value="">Select a state first</option>';
+        }
+    });
+</script>
+
+{% endblock %}

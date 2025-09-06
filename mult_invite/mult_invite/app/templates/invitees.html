@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+
+{% block title %}Invitees | Admin Dashboard{% endblock %}
+{% block header_title %}Manage Organization Invitees{% endblock %}
+
+{% block content %}
+<div class="container py-4 px-3 px-md-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm border-0 rounded-3 mb-4">
+                <div class="card-header bg-primary text-white py-3">
+                    <div
+                        class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between">
+                        <h3 class="fw-bold mb-0">Manage Organization Invitees</h3>
+                        <span class="badge bg-light text-primary rounded-pill fs-6 mt-2 mt-md-0">Admin: {{
+                            current_user.name }}</span>
+                    </div>
+                </div>
+
+                <div class="card-body p-4">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                    {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+                    {% endwith %}
+
+                    <div class="row g-3 mb-4">
+                    <!-- Present Card -->
+                    <div class="col-md-4">
+                        <div class="card border-0 bg-success bg-opacity-10 h-100">
+                            <div class="card-body text-center">
+                                <h5 class="card-title text-success">Present</h5>
+                                <h2 class="display-5 fw-bold" id="no_invitee_present">{{ no_invitee_present }}</h2>
+                                <p class="card-text">Confirmed attendees</p>
+                                <small class="text-dark">Male: {{ present_male }} | Female: {{ present_female }}</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Absent Card -->
+                    <div class="col-md-4">
+                        <div class="card border-0 bg-danger bg-opacity-10 h-100">
+                            <div class="card-body text-center">
+                                <h5 class="card-title text-danger">Absent</h5>
+                                <h2 class="display-5 fw-bold" id="no_invitee_absent">{{ no_invitee_absent }}</h2>
+                                <p class="card-text">Not yet confirmed</p>
+                                <small class="text-dark">Male: {{ absent_male }} | Female: {{ absent_female }}</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Total Card -->
+                    <div class="col-md-4">
+                        <div class="card border-0 bg-primary bg-opacity-10 h-100">
+                            <div class="card-body text-center">
+                                <h5 class="card-title text-primary">Total</h5>
+                                <h2 class="display-5 fw-bold" id="no_invitees">{{ no_invitees }}</h2>
+                                <p class="card-text mt-1">Registered invitees</p>
+                                <small class="text-dark">Male: {{ total_male }} | Female: {{ total_female }}</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-7">
+                            <form method="GET" action="{{ url_for('inv.show_invitees',org_uuid=org.uuid) }}" class="d-flex gap-2">
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0">
+                                        <i class="bi bi-search"></i>
+                                    </span>
+                                    <input type="text" name="search" class="form-control border-start-0 ps-0"
+                                        placeholder="Search by email or phone number"
+                                        value="{{ request.args.get('search', '') }}">
+                                    <button type="submit" class="btn btn-primary">Search</button>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="col-md-5">
+                            <div class="d-flex flex-wrap gap-2 justify-content-md-end">
+                                <a href="{{ url_for('inv.manage_invitee',org_uuid=org.uuid) }}" class="btn btn-success">
+                                    <i class="bi bi-person-plus-fill"></i> Manage Invitee
+                                </a>
+
+                                {% if current_user.can_export_invitees %}
+                                    <a href="{{ url_for('inv.export_invitees', org_uuid=org.uuid, invitees=invitees, pagination=pagination) }}" class="btn btn-primary">
+                                    <i class="bi bi-file-earmark-excel"></i> Export
+                                </a>                  
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 mb-4">
+                        <div class="d-flex flex-wrap gap-2">
+                            <a href="{{ url_for('inv.all_feedback',org_uuid=org.uuid) }}" class="btn btn-outline-info">
+                                <i class="bi bi-chat-square-text"></i> Feedback List
+                            </a>
+                            <a href="{{ url_for('inv.feedback_chart',org_uuid=org.uuid) }}" class="btn btn-outline-dark">
+                                <i class="bi bi-bar-chart"></i> Feedback Charts
+                            </a>
+
+                            <a href="{{ url_for('inv.manage_invitee',org_uuid=org.uuid) }}" class="btn btn-outline-dark btn-sm">
+                                <i class="bi bi-bar-chart"></i> Scan using Phone scanner
+                            </a>
+<!-- 
+                            <button onclick="startScanner()">📷 Scan QR Code</button>
+                            <div id="qr-reader" style="width: 30px; margin-top: 5px;"></div>
+                            <div id="scan-result" style="margin-top: 10px;"></div> -->
+
+                            <a href="{{ url_for('inv.manage_locations',org_uuid=org.uuid) }}" class="btn btn-outline-info">
+                                 <i class="bi bi-geo-alt-fill"></i> locations
+                            </a>
+
+                            {% if current_user.is_super_admin or current_user.is_org_admin  %}
+                           <a href="{{ url_for('inv.add_event', org_uuid=org.uuid) }}" class="btn btn-outline-info">
+                            <i class="bi bi-shield-lock"></i> Add Event
+                            </a>
+                            <a href="{{ url_for('inv.manage_admin',org_uuid=org.uuid) }}" class="btn btn-outline-danger btn-sm">
+                                <i class="bi bi-shield-lock"></i> Manage Admins
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="table-responsive mt-3">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th scope="col">ID</th>
+                                    <th scope="col">Name</th>
+                                    <th scope="col">Position</th>
+                                    <th scope="col">Phone</th>
+                                    <th scope="col">State</th>
+                                    <th scope="col">LGA</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col" class="text-center">QR Code</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for invitee in invitees %}
+                                <tr>
+                                    <td>{{ invitee.id }}</td>
+                                    <td class="fw-medium">{{ invitee.name }}</td>
+                                    <td>{{ invitee.position }}</td>
+                                    <td>{{ invitee.phone_number }}</td>
+                                    <td>{{ invitee.state.upper() }}</td>
+                                    <td>{{ invitee.lga }}</td>
+                                    <td>
+                                        {% if invitee.confirmed == 'Present' %}
+                                        <span class="badge bg-success rounded-pill">Present</span>
+                                        {% else %}
+                                        <span class="badge bg-danger rounded-pill">Absent</span>
+                                        {% endif %}
+                                    </td>
+
+                                     <td class="text-center">
+                                        <div class="qr-code-container position-relative">
+                                            <img id="qr-code-{{ invitee.id }}" class="qr-code img-thumbnail rounded"
+                                                src="{{ url_for('inv.get_qr_code',org_uuid=org.uuid, invitee_id=invitee.id) }}" alt="QR Code" style="width: 50px; height: 50px; display: none;">
+                                            <button onclick="toggleQrCode('{{ invitee.id }}');"
+                                                class="btn btn-sm btn-outline-primary toggle-btn">
+                                                <i class="bi bi-qr-code"></i> Show QR
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                 {% else %}
+                                    <tr>
+                                        <td colspan="8">No Invitees Registered yet.</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <!-- this here -->
+                   {% if pagination %}
+<nav aria-label="Page navigation" class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% if pagination.has_prev %}
+        <li class="page-item">
+            <a class="page-link"
+               href="{{ url_for('show_invitees', page=pagination.prev_num, search=request.args.get('search', '')) }}"
+               aria-label="Previous">
+                <span aria-hidden="true">&laquo;</span>
+                <span class="visually-hidden">Previous</span>
+            </a>
+        </li>
+        {% else %}
+        <li class="page-item disabled">
+            <a class="page-link" href="#" aria-label="Previous">
+                <span aria-hidden="true">&laquo;</span>
+                <span class="visually-hidden">Previous</span>
+            </a>
+        </li>
+        {% endif %}
+
+        {% for page_num in pagination.iter_pages() %}
+        {% if page_num %}
+        {% if page_num == pagination.page %}
+        <li class="page-item active" aria-current="page">
+            <a class="page-link" href="#">{{ page_num }} <span class="visually-hidden">(current)</span></a>
+        </li>
+        {% else %}
+        <li class="page-item">
+            <a class="page-link"
+               href="{{ url_for('show_invitees', page=page_num, search=request.args.get('search', '')) }}">{{ page_num }}</a>
+        </li>
+        {% endif %}
+        {% else %}
+        <li class="page-item disabled"><a class="page-link" href="#">...</a></li>
+        {% endif %}
+        {% endfor %}
+
+        {% if pagination.has_next %}
+        <li class="page-item">
+            <a class="page-link"
+               href="{{ url_for('show_invitees', page=pagination.next_num, search=request.args.get('search', '')) }}"
+               aria-label="Next">
+                <span aria-hidden="true">&raquo;</span>
+                <span class="visually-hidden">Next</span>
+            </a>
+        </li>
+        {% else %}
+        <li class="page-item disabled">
+            <a class="page-link" href="#" aria-label="Next">
+                <span aria-hidden="true">&raquo;</span>
+                <span class="visually-hidden">Next</span>
+            </a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+
+{{ super() }}
+
+
+    <!-- // umpkg -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+
+<script>
+
+     // Defined from Flask context
+        const orgUuid = "{{ org_uuid }}";
+
+
+
+    // QR Code Toggle Functionality
+    function toggleQrCode(inviteeId) {
+        const qrCodeImg = document.getElementById(`qr-code-${inviteeId}`);
+        const toggleBtn = qrCodeImg.nextElementSibling;
+
+        if (qrCodeImg.style.display === 'none' || qrCodeImg.style.display === '') {
+            if (!qrCodeImg.src || !qrCodeImg.src.startsWith('data:image')) {
+                // Fetch the base64 QR code only if it's not already loaded
+                fetch(`/${orgUuid}/get_qr_code/${inviteeId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        qrCodeImg.src = `data:image/png;base64,${data.qr_code_path}`;
+                        qrCodeImg.style.display = 'block';
+                        toggleBtn.innerHTML = '<i class="bi bi-eye-slash"></i> Hide QR';
+                        toggleBtn.classList.replace('btn-outline-primary', 'btn-outline-secondary');
+                    })
+                    .catch(error => {
+                        console.error('Failed to load QR code:', error);
+                    });
+            } else {
+                // Already loaded, just show
+                qrCodeImg.style.display = 'block';
+                toggleBtn.innerHTML = '<i class="bi bi-eye-slash"></i> Hide QR';
+                toggleBtn.classList.replace('btn-outline-primary', 'btn-outline-secondary');
+            }
+        } else {
+            // Hide QR code
+            qrCodeImg.style.display = 'none';
+            toggleBtn.innerHTML = '<i class="bi bi-qr-code"></i> Show QR';
+            toggleBtn.classList.replace('btn-outline-secondary', 'btn-outline-primary');
+        }
+    }
+
+    // Enable Bootstrap tooltips
+    document.addEventListener('DOMContentLoaded', function () {
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    });
+
+    // scan 
+  
+
+     function startScanner() {
+    const qrScanner = new Html5Qrcode("qr-reader");
+    qrScanner.start(
+      { facingMode: "environment" }, // Use rear camera
+      { fps: 10, qrbox: 250 },
+      (decodedText) => {
+        document.getElementById('scan-result').innerText = "Scanned: " + decodedText;
+        qrScanner.stop(); // Stop scanning after success
+        // Optionally: send decodedText to Flask backend
+      },
+      (errorMsg) => {
+        // console.log('Scan error', errorMsg); // Optional: log scan errors
+      }
+    );
+  }
+
+
+
+</script>
+{% endblock %}

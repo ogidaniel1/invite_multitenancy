@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Events - {{ org.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h3 class="card-title mb-0">{{ org.name }}: Events</h3>
+                    <a href="{{ url_for('inv.add_event', org_uuid=org.uuid) }}" class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>Add New Event
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
+                    {% endwith %}
+
+                    {% if events %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">#</th>
+                                        <th scope="col">Event Name</th>
+                                        <th scope="col">Location</th>
+                                        <th scope="col">Start Date & Time</th>
+                                        <th scope="col">End Date & Time</th>
+                                        <th scope="col">Status</th>
+                                        <th scope="col" class="text-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for event in events %}
+                                    <tr>
+                                        <td>{{ loop.index }}</td>
+                                        <td>
+                                            <strong>{{ event.name }}</strong>
+                                        </td>
+                                        <td>
+                                            <i class="fas fa-map-marker-alt text-muted me-1"></i>
+                                            {{ event.location.name }}
+                                        </td>
+                                        <td>
+                                            <small class="text-muted d-block">{{ event.start_time.strftime('%Y-%m-%d') }}</small>
+                                            <span>{{ event.start_time.strftime('%I:%M %p') }}</span>
+                                        </td>
+                                        <td>
+                                            <small class="text-muted d-block">{{ event.end_time.strftime('%Y-%m-%d') }}</small>
+                                            <span>{{ event.end_time.strftime('%I:%M %p') }}</span>
+                                        </td>
+                                        <td>
+                                            {% if event.is_active %}
+                                                <span class="badge bg-success">Active</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">Inactive</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            <div class="btn-group" role="group" aria-label="Event actions">
+                                                <a href="{{ url_for('inv.edit_event', org_uuid=org.uuid, event_id=event.id) }}"
+                                                    class="btn btn-sm btn-outline-primary px-2" title="Edit Event">
+                                                    <i class="fas fa-edit me-1"></i> Edit
+                                                </a>
+                                                <button type="button" class="btn btn-sm btn-outline-danger px-2" data-bs-toggle="modal"
+                                                    data-bs-target="#deleteModal{{ event.id }}" title="Delete Event">
+                                                    <i class="fas fa-trash me-1"></i> Delete
+                                                </button>
+                                            </div>
+
+
+                                    <!-- Delete Confirmation Modal -->
+                                    <div class="modal fade" id="deleteModal{{ event.id }}" tabindex="-1" 
+                                         aria-labelledby="deleteModalLabel{{ event.id }}" aria-hidden="true">
+                                        <div class="modal-dialog">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title" id="deleteModalLabel{{ event.id }}">
+                                                        Confirm Delete
+                                                    </h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <p>Are you sure you want to delete the event <strong>"{{ event.name }}"</strong>?</p>
+                                                    <div class="alert alert-warning">
+                                                        <i class="fas fa-exclamation-triangle me-1"></i>
+                                                        This action cannot be undone.
+                                                    </div>
+                                                    <p><strong>Event Details:</strong></p>
+                                                    <ul class="list-unstyled ms-3">
+                                                        <li><strong>Location:</strong> {{ event.location.name }}</li>
+                                                        <li><strong>Start:</strong> {{ event.start_time.strftime('%Y-%m-%d %I:%M %p') }}</li>
+                                                        <li><strong>End:</strong> {{ event.end_time.strftime('%Y-%m-%d %I:%M %p') }}</li>
+                                                    </ul>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                    <form method="POST" action="{{ url_for('inv.delete_event', org_uuid=org.uuid, event_id=event.id) }}" class="d-inline">
+                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                        <button type="submit" class="btn btn-danger">
+                                                            <i class="fas fa-trash me-1"></i>Delete Event
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination (if needed) -->
+                        {% if events.pages > 1 %}
+                        <nav aria-label="Events pagination" class="mt-4">
+                            <ul class="pagination justify-content-center">
+                                {% if events.has_prev %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('inv.view_event', org_uuid=org.uuid, page=events.prev_num) }}">
+                                            <i class="fas fa-chevron-left"></i> Previous
+                                        </a>
+                                    </li>
+                                {% endif %}
+                                
+                                {% for page_num in events.iter_pages() %}
+                                    {% if page_num %}
+                                        {% if page_num != events.page %}
+                                            <li class="page-item">
+                                                <a class="page-link" href="{{ url_for('inv.view_event', org_uuid=org.uuid, page=page_num) }}">{{ page_num }}</a>
+                                            </li>
+                                        {% else %}
+                                            <li class="page-item active">
+                                                <span class="page-link">{{ page_num }}</span>
+                                            </li>
+                                        {% endif %}
+                                    {% else %}
+                                        <li class="page-item disabled">
+                                            <span class="page-link">...</span>
+                                        </li>
+                                    {% endif %}
+                                {% endfor %}
+                                
+                                {% if events.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('inv.view_event', org_uuid=org.uuid, page=events.next_num) }}">
+                                            Next <i class="fas fa-chevron-right"></i>
+                                        </a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                        {% endif %}
+
+                    {% else %}
+                        <div class="text-center py-5">
+                            <div class="mb-4">
+                                <i class="fas fa-calendar-times fa-4x text-muted"></i>
+                            </div>
+                            <h4 class="text-muted">No Events Found</h4>
+                            <p class="text-muted mb-4">You haven't created any events yet.</p>
+                            <a href="{{ url_for('inv.add_event', org_uuid=org.uuid) }}" class="btn btn-primary">
+                                <i class="fas fa-plus me-1"></i>Create Your First Event
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Auto-dismiss alerts after 5 seconds
+    document.addEventListener('DOMContentLoaded', function() {
+        const alerts = document.querySelectorAll('.alert:not(.alert-danger)');
+        alerts.forEach(function(alert) {
+            setTimeout(function() {
+                const bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            }, 5000);
+        });
+    });
+</script>
+{% endblock %}

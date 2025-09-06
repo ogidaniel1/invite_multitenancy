@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{% block title %}Super Admin Dashboard{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #0056b3; /* Bootstrap primary blue */
+            --primary-dark: #0056b3;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --info-color: #17a2b8;
+            --light-bg: #f8f9fa;
+            --white-bg: #ffffff;
+            --text-dark: #343a40;
+            --text-light: #f8f9fa;
+            --border-light: #e9ecef;
+            --shadow: 0 2px 4px rgba(0,0,0,.05);
+            --shadow-lg: 0 4px 8px rgba(0,0,0,.08);
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--light-bg);
+            color: var(--text-dark);
+        }
+
+        /* Header Styling */
+        .dashboard-header {
+            background-color: var(--primary-color); /* Corrected: Using variable, previously conflicted with light gray */
+            color: var(--text-light);
+            padding: 2.5rem 0;
+            margin-bottom: 2rem;
+            border-bottom-left-radius: 15px;
+            border-bottom-right-radius: 15px;
+            box-shadow: var(--shadow-lg);
+            text-align: center;
+        }
+        .dashboard-header h1 {
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+        .dashboard-header p.lead {
+            opacity: 0.9;
+        }
+
+        /* Stats Cards */
+        .stats-card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            margin-bottom: 1.5rem;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            background-color: var(--white-bg);
+            overflow: hidden;
+        }
+        .stats-card:hover {
+            transform: translateY(-7px);
+            box-shadow: 0 6px 12px rgba(0,0,0,.1);
+        }
+        .stats-card .card-body {
+            padding: 1.5rem;
+        }
+        .stats-card i {
+            color: var(--primary-color);
+            font-size: 2.5rem;
+            margin-bottom: 0.75rem;
+            display: block;
+        }
+        .stats-card h3 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            margin-bottom: 0.25rem;
+        }
+        .stats-card p {
+            font-size: 0.9rem;
+            color: var(--secondary-color);
+            margin-bottom: 0;
+        }
+
+        /* Navigation Tabs */
+        .nav-pills {
+            background-color: var(--white-bg);
+            border-radius: 12px;
+            padding: 0.75rem;
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .nav-pills .nav-item {
+            flex-grow: 1;
+        }
+        .nav-pills .nav-link {
+            border-radius: 10px;
+            color: var(--primary-color); /* Corrected: Using variable, previously conflicted */
+            background-color: var(--border-light); /* Corrected: Using variable, previously conflicted */
+            padding: 0.75rem 1.25rem;
+            font-weight: 500;
+            transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+            text-align: center;
+        }
+        .nav-pills .nav-link:hover {
+            background-color: rgba(0, 123, 255, 0.1);
+            color: var(--primary-dark);
+        }
+        .nav-pills .nav-link.active {
+            background-color: var(--primary-color);
+            color: var(--text-light);
+            box-shadow: 0 2px 5px rgba(0, 123, 255, 0.3);
+        }
+        .nav-pills .nav-link .badge {
+            background-color: rgba(255,255,255,0.3);
+            color: var(--primary-color);
+            min-width: 25px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            height: 20px;
+            border-radius: 10px;
+            padding: 0 8px;
+            font-size: 0.75rem;
+            vertical-align: middle;
+            margin-left: 0.5rem;
+        }
+        .nav-pills .nav-link.active .badge {
+            background-color: rgba(0,0,0,0.2);
+            color: var(--text-light);
+        }
+
+        /* Filter Section */
+        .filter-section {
+            background-color: var(--white-bg); /* Corrected: Using variable, previously conflicted */
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow); /* Corrected: Using variable, previously conflicted */
+            border: 1px solid var(--border-light); /* Corrected: Explicit border, previously conflicted */
+        }
+        .filter-section .form-label {
+            font-weight: 500;
+            color: var(--secondary-color); /* Corrected: Using variable, previously conflicted */
+            margin-bottom: 0.5rem;
+        }
+        .filter-section .form-control,
+        .filter-section .form-select {
+            border-radius: 8px;
+            border-color: var(--border-light);
+            padding: 0.6rem 0.9rem;
+        }
+        /* General Custom Button Styles */
+        .btn-custom {
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: 8px;
+            padding: 0.6rem 1.2rem;
+            transition: background-color 0.2s, box-shadow 0.2s, border-color 0.2s;
+            border-color: var(--primary-color);
+        }
+        .btn-custom:hover {
+            background-color: var(--primary-dark);
+            box-shadow: 0 2px 8px rgba(213, 216, 219, 0.2);
+            border-color: var(--primary-dark);
+        }
+
+        /* Small Button Size Styles (applies to any .btn-sm) */
+        .btn-sm {
+            padding: 0.4rem 1rem;
+            border-radius: 8px;
+            font-size: 0.875rem; /* Standard Bootstrap small button font size */
+        }
+
+        /* Ensure .btn-custom also respects .btn-sm padding if both are present */
+        .btn-custom.btn-sm {
+            padding: 0.4rem 1rem; /* Prioritize the smaller padding when both classes are used */
+        }
+        /* Bulk Actions */
+        .bulk-actions {
+            background-color: #e2f3ff; /* Specific light blue for bulk actions, could be a variable */
+            border: 1px solid #b3e0ff; /* Specific border for bulk actions, could be a variable */
+            border-radius: 12px; /* Changed to 12px for consistency with other cards */
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+            display: none; /* Corrected: Removed redundant display: flex; from earlier definition */
+        }
+        .bulk-actions span {
+            font-weight: 500;
+            color: var(--text-dark);
+        }
+        .bulk-actions strong {
+            color: var(--primary-dark); /* Consistent with theme variables */
+        }
+        .bulk-actions .btn-sm {
+            border-radius: 6px;
+            padding: 0.4rem 0.8rem;
+            font-size: 0.85rem;
+        }
+
+        /* Card and Table Styling */
+        .card {
+            border: none;
+            border-radius: 12px; /* Changed to 12px for consistency */
+            box-shadow: var(--shadow);
+            margin-bottom: 1.5rem;
+        }
+        .card-header {
+            background-color: var(--white-bg); /* Corrected: Using variable, previously conflicted */
+            border-bottom: 1px solid var(--border-light);
+            padding: 1.25rem 1.5rem;
+            border-top-left-radius: 12px; /* Changed to 12px for consistency */
+            border-top-right-radius: 12px; /* Changed to 12px for consistency */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .card-header h5 {
+            font-weight: 600;
+            color: var(--text-dark);
+            margin-bottom: 0;
+        }
+        .card-header .btn-sm {
+            padding: 0.4rem 1rem;
+            border-radius: 8px;
+        }
+
+        .table-responsive {
+            border-radius: 12px; /* Changed to 12px for consistency */
+            overflow: hidden;
+        }
+        .table {
+            margin-bottom: 0;
+            color: var(--text-dark);
+        }
+        .table thead th {
+            background-color: #eaf2ff;
+            color: var(--primary-dark);
+            font-weight: 600;
+            border-bottom: none;
+            padding: 1rem 1.5rem;
+            vertical-align: middle;
+        }
+        .table tbody td {
+            padding: 1rem 1.5rem;
+            vertical-align: middle;
+            border-top: 1px solid var(--border-light);
+        }
+        .table-hover tbody tr:hover {
+            background-color: #f2f7ff;
+        }
+        .table .form-check-input {
+            border-radius: 4px;
+            width: 1.1em;
+            height: 1.1em;
+        }
+
+        /* Action Buttons in Table */
+        .table .btn-group .btn {
+            border-radius: 6px;
+            padding: 0.3rem 0.75rem;
+            font-size: 0.8rem;
+            margin-left: 0.25rem;
+        }
+        .table .btn-group .btn:first-child {
+            margin-left: 0;
+        }
+
+        /* Badges for Status */
+        .badge {
+            font-size: 0.75em;
+            padding: 0.4em 0.8em;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            text-transform: capitalize;
+        }
+        .badge.bg-success { background-color: var(--success-color) !important; }
+        .badge.bg-danger { background-color: var(--danger-color) !important; }
+        .badge.bg-warning { background-color: var(--warning-color) !important; color: #333 !important; }
+        .badge.bg-info { background-color: var(--info-color) !important; }
+        .badge.bg-secondary { background-color: var(--secondary-color) !important; }
+        .badge.bg-primary { background-color: var(--primary-color) !important; }
+
+        /* Loading Overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1050;
+            display: none;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .loading-spinner {
+            border: 5px solid rgba(0, 0, 0, 0.1);
+            border-left-color: var(--primary-color);
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+        }
+        .loading-text {
+            color: var(--primary-color);
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Flash Messages */
+        #flashMessagesContainer {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1060;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-width: 380px;
+        }
+        #flashMessagesContainer .alert {
+            margin-bottom: 0;
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            font-size: 0.95rem;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            align-items: center;
+        }
+        #flashMessagesContainer .alert .btn-close {
+            font-size: 0.9rem;
+            margin-left: 1rem;
+        }
+
+        /* Footer styling */
+        .footer {
+            background-color: #343a40;
+            color: #f8f9fa;
+            padding: 1rem 0;
+            margin-top: 2rem;
+        }
+
+        /* Dropdown Menu - styles were conflicting, integrated here */
+        .dropdown-menu {
+            border-radius: 0.5rem;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        }
+        .dropdown-item {
+            padding: 0.5rem 1rem;
+        }
+        .dropdown-item i {
+            width: 20px; /* Align icons */
+        }
+        /* Toast messages - added for completeness */
+        .toast-container {
+            z-index: 1070;
+        }
+        .toast {
+            min-width: 250px;
+        }
+    </style>
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-building me-2"></i>
+                Organization Manager
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/organization/1/view" onclick="showListPage()">
+                    <i class="fas fa-list me-1"></i>
+                    Organizations
+                </a>
+                <a class="nav-link active" href="/admin/management">
+                    <i class="fas fa-users-cog me-1"></i>
+                    Management
+                </a>
+                <a class="nav-link" href="{{ url_for('inv.register_organization') }}" onclick="showCreateForm()">
+                    <i class="fas fa-plus me-1"></i>
+                    Add New
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="loading-overlay" id="loadingSpinner">
+        <div class="loading-spinner"></div>
+        <span class="loading-text">Loading...</span>
+    </div>
+
+    <div id="flashMessagesContainer">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    {% block content %}
+    {% endblock %}
+
+    <footer class="footer">
+        <div class="container text-center py-3">
+            <p class="mb-0">&copy; <span class="current-year"></span> DanwebIT. All rights reserved.</p>
+            <p class="small mb-0">Designed with <i class="bi bi-heart-fill text-danger"></i> by <a
+                    href="https://x.com/danwebit" class="text-white">DanwebIT</a></p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    {% block scripts %}
+    {% endblock %}
+
+    <script>
+        // Get current year for footer
+        document.addEventListener('DOMContentLoaded', function () {
+            const currentYear = new Date().getFullYear();
+            document.querySelectorAll('.current-year').forEach(el => {
+                el.textContent = currentYear;
+            });
+        });
+
+        // Placeholder functions for navigation.
+        // You should define the actual logic for these functions
+        // depending on how you want to handle page transitions or form displays.
+        function showListPage() {
+            console.log("showListPage() called. Implement your page navigation/display logic here.");
+            // Example: If using AJAX to load content:
+            // loadContent('/organizations-list');
+        }
+
+        function showCreateForm() {
+            console.log("showCreateForm() called. Implement your form display logic here.");
+            // Example: If using a modal:
+            // $('#createFormModal').modal('show');
+            // Or if navigating: window.location.href = '/create-new-organization';
+        }
+    </script>
+</body>
+</html>

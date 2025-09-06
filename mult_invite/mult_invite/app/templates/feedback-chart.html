@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}Admin | Admin Dashboard{% endblock %}
+
+{% block header_title %}Manage Admins{% endblock %}
+
+{% block content %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Feedback Charts</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script> <!-- Plugin for Labels -->
+    
+    <style>
+        /* Center alignment for all elements */
+        .container {
+            width: 80%;
+            margin: auto;
+            text-align: center;
+        }
+
+        /* Chart container styles */
+        .chart-container {
+            width: 50%;
+            margin: auto;
+        }
+
+        /* Table styling */
+        .table-container {
+            margin-top: 30px;
+            display: flex;
+            justify-content: center;
+        }
+
+        table {
+            width: 60%;
+            border-collapse: collapse;
+            text-align: center;
+            font-size: 16px;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+        }
+
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .chart-container {
+                width: 90%;
+            }
+
+            table {
+                width: 90%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Feedback Distribution</h2>
+
+        <!-- Pie Chart -->
+        <div class="chart-container">
+            <canvas id="feedbackPieChart"></canvas>
+        </div>
+
+        <!-- Histogram -->
+        <div class="chart-container">
+            <canvas id="feedbackHistogram"></canvas>
+        </div>
+
+       
+
+        <!-- Feedback Table -->
+        <!-- Feedback Summary Table -->
+           
+    <h2>Feedback Summary</h2>
+    <div class="table-container">
+        <table>
+        <thead>
+            <tr>
+                <th>Feedback Source</th>
+                <th>Value(s)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for label, count in zip(source_labels, source_counts) %}
+            <tr>
+                <td><strong>{{ label }}</strong></td>
+                <td><strong>{{ count }}</strong></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+</div>
+
+    <script>
+        const labels = {{ labels | tojson }};
+        const values = {{ values | tojson }};
+        const backgroundColors = ['#FF6384', '#36A2EB', '#FFCE56', '#4CAF50', '#9966FF', '#FF9F40'];
+
+        // Pie Chart
+        const pieCtx = document.getElementById('feedbackPieChart').getContext('2d');
+        new Chart(pieCtx, {
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Feedback Sources',
+                    data: values,
+                    backgroundColor: backgroundColors,
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    datalabels: {
+                        color: '#000',
+                        anchor: 'end',
+                        align: 'start',
+                        font: { weight: 'bold' },
+                        formatter: (value, ctx) => ctx.chart.data.labels[ctx.dataIndex] + ': ' + value
+                    }
+                }
+            },
+            plugins: [ChartDataLabels]
+        });
+
+        // Histogram (Bar Chart)
+        const barCtx = document.getElementById('feedbackHistogram').getContext('2d');
+        new Chart(barCtx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Feedback Count',
+                    data: values,
+                    backgroundColor: backgroundColors,
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: { y: { beginAtZero: true } },
+                plugins: {
+                    legend: { display: false },
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'top',
+                        color: '#000',
+                        font: { weight: 'bold' },
+                        formatter: (value) => value
+                    }
+                }
+            },
+            plugins: [ChartDataLabels]
+        });
+    </script>
+
+<div><br>
+    <br>
+    <footer>
+        <p>&copy; {{org.slug}}. All Rights Reserved.</p>
+    </footer>
+</div>
+</div>
+</body>
+{% endblock %}
+</html>

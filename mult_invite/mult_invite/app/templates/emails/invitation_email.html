@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; }
+        .email-container { max-width: 600px; margin: 20px auto; background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
+        .header { text-align: center; padding-bottom: 20px; border-bottom: 1px solid #eeeeee; }
+        .header h1 { color: #333333; font-size: 24px; }
+        .content { padding-top: 20px; color: #555555; line-height: 1.6; }
+        .content p { margin-bottom: 15px; }
+        .button-container { text-align: center; margin: 30px 0; }
+        .button { background-color: #007bff; color: white !important; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-size: 16px; display: inline-block; }
+        .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #aaaaaa; }
+        .footer p { margin: 5px 0; }
+        a { color: #007bff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <h1>Invitation to Join My App</h1>
+        </div>
+        <div class="content">
+            <p>Dear {{ invitation.email }},</p>
+            <p>You have been invited to join My App
+                {% if organization_name %}
+                at <strong>{{ organization_name }}</strong>
+                {% endif %}
+                as a <strong>{{ role }}</strong>.
+            </p>
+            <p>To accept this invitation and set up your account, please click the button below:</p>
+            <div class="button-container">
+                <a href="{{ invitation_link }}" class="button">Accept Invitation</a>
+            </div>
+            <p>Alternatively, you can copy and paste the following link into your browser:</p>
+            <p><a href="{{ invitation_link }}">{{ invitation_link }}</a></p>
+            <p>This invitation will expire on {{ invitation.expires_at.strftime('%Y-%m-%d %H:%M UTC') }}.</p>
+            <p>If you have any questions, please do not hesitate to contact us.</p>
+            <p>Thank you,</p>
+            <p>The My App Team</p>
+        </div>
+        <div class="footer">
+            <p>&copy; {{ now().year }} My App. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

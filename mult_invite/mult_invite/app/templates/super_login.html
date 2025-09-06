@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6 col-xl-5">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white text-center py-3">
+                    <img src="{{ url_for('static', filename='images/' + (org.logo_url or 'logo.png')) }}" alt="Logo" style="max-width: 70px;" class="mb-2">
+                    <h4 class="mt-2">Super Admin Login</h4>
+                </div>
+                <div class="card-body px-4 py-4">
+                             <!-- Flash Messages (Placed Just Above the Logo) -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-container">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ 'success' if category == 'info' else 'danger' }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+                    <form method="POST" action="{{ url_for('inv.super_login',org=org,admin=admin) }}" class="form-horizontal">
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="form-floating mb-3">
+                            {{ form.email(class_="form-control", placeholder="Enter your email") }}
+                            <label for="email">{{ form.email.label }}</label>
+                            {% if form.email.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.email.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="form-floating mb-3">
+                            {{ form.password(class_="form-control", placeholder="Enter your password") }}
+                            <label for="password">{{ form.password.label }}</label>
+                            {% if form.password.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.password.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-100 mt-3">{{ form.submit.label.text }}</button>
+                    </form>
+                </div>
+                <div class="card-footer text-center py-2">
+                    <small>Powered by <a href="https://x.com/danwebit" target="_blank" rel="noopener noreferrer">DanwebIT</a></small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

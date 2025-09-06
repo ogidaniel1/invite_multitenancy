@@ -1,0 +1,55 @@
+{% extends "base.html" %} {# Extend your base layout, or a simple layout #}
+
+{% block title %}Accept Invitation{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header text-center">
+                    <h3>Accept Your Invitation</h3>
+                </div>
+                <div class="card-body">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }}">{{ message }}</div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    {% if invitation %}
+                        <p class="text-center">You have been invited to join as an  {{ invitation.role.replace('_', ' ').title() }} 
+                            {% if invitation.organization %} for  {{ invitation.organization.name }}  {% endif %}.
+                            Please set up your account.</p>
+
+                        <form method="POST" enctype="multipart/form-data">                            
+                        <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+                            <div class="mb-3">
+                                <label for="name" class="form-label">Your Name</label>
+                                <input type="text" class="form-control" id="name" name="name" required autofocus>
+                            </div>
+                            <div class="mb-3">
+                                <label for="email" class="form-label">Email Address (Read-only)</label>
+                                <input type="email" class="form-control" id="email" value="{{ invitation.email }}" readonly>
+                            </div>
+                            <div class="mb-3">
+                                <label for="password" class="form-label">Password</label>
+                                <input type="password" class="form-control" id="password" name="password" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="confirm_password" class="form-label">Confirm Password</label>
+                                <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">Set Up Account</button>
+                        </form>
+                    {% else %}
+                        <p class="text-center">If you believe this is an error, please contact support.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

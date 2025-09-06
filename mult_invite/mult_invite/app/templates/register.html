@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Register Member{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white text-center py-3">
+                     {% if org.logo_url %}
+                        <img src="{{ url_for('static', filename='images/' + org.logo_url) }}" alt="{{ org.name }} Logo"
+                            class="img-fluid" style="max-width: 50px;">
+                        {% else %}
+                        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Default Logo"
+                            class="img-fluid" style="max-width: 50px;">
+                     {% endif %} 
+                    <h4 class="mt-2">Register New Member</h4>
+                </div>
+                <div class="card-body px-4 py-4">
+
+                    <!-- flash message -->
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                    {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+                    {% endwith %}
+
+                    <form method="POST" action="{{ url_for('inv.register', org_uuid=org.uuid) }}" class="form-horizontal">
+                        {{ form.hidden_tag() }}
+                        
+                        {% for field in [form.name, form.gender, form.email, form.phone_number, form.parish, form.area, form.position,form.address, form.state, form.lga] %}
+                        <div class="form-floating mb-3">
+                            {{ field(class="form-control", placeholder=field.label.text) }}
+                            <label for="{{ field.id }}">{{ field.label.text }}</label>
+                            {% if field.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in field.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+
+                        <button type="submit" class="btn btn-success w-100 mt-3">{{ form.submit.label.text }}</button>
+                    </form>
+                </div>
+                <div class="card-footer text-center py-2">
+                    <small>Powered by <a href="https://x.com/danwebit" target="_blank" rel="noopener noreferrer">DanwebIT</a></small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+    $(document).ready(function () {
+        $('#state').change(function () {
+            var selectedState = $(this).val();
+            if (selectedState) {
+                $.ajax({
+                    url: "{{ url_for('inv.get_lgas') }}",
+                    type: 'GET',
+                    data: { state: selectedState },
+                    success: function (response) {
+                        var lgaSelect = $('#lga');
+                        lgaSelect.empty();
+                        lgaSelect.append($('<option>', {
+                            value: '',
+                            text: 'Select LGA',
+                            disabled: true,
+                            selected: true
+                        }));
+                        $.each(response.lga, function (index, lga) {
+                            lgaSelect.append($('<option>', {
+                                value: lga,
+                                text: lga
+                            }));
+                        });
+                        lgaSelect.prop('disabled', false);
+                    },
+                    error: function () {
+                        alert('Error loading LGAs.');
+                    }
+                });
+            } else {
+                $('#lga').empty().append($('<option>', {
+                    value: '',
+                    text: 'Select LGA',
+                    disabled: true,
+                    selected: true
+                })).prop('disabled', true);
+            }
+        });
+
+        // Initialize the LGA dropdown on page load
+        if ($('#state').val()) {
+            $('#state').trigger('change');
+        } else {
+            $('#lga').prop('disabled', true);
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirm Attendance</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .form-container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            width: 300px;
+            text-align: center;
+        }
+
+        .form-container h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .alert {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        .alert-danger {
+             background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .text-danger {
+            color: #721c24 !important;
+        }
+
+        .small {
+            font-size: 0.875rem;
+        }
+
+        .mb-3 {
+            margin-bottom: 1rem;
+        }
+
+        .form-label{
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #343a40;
+            font-weight: bold;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="form-container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+                {% endwith %}
+                        
+            <h2>{{ org.slug }}</h2>
+            <h3>Confirm Attendance</h3>
+
+       <form method="POST" action="{{ url_for('inv.confirm_attendance',org_uuid=org_uuid) }}" onsubmit="return attachLocation();">
+            {{ form.hidden_tag() }}
+            <div class="mb-3">
+                {{ form.phone_number.label(class="form-label") }}
+                {{ form.phone_number(placeholder="Enter your phone number") }}<br>
+                {% if form.phone_number.errors %}
+                    <div class="text-danger small">{{ form.phone_number.errors[0] }}</div>
+                {% endif %}
+            </div>
+            
+            {{ form.latitude(id="latitude") }} {# Hidden field for latitude #}
+            {{ form.longitude(id="longitude") }} {# Hidden field for longitude #}
+            <button type="submit">Confirm</button>
+        </form>
+    </div>
+
+    <script>
+        function attachLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    document.getElementById("latitude").value = position.coords.latitude;
+                    document.getElementById("longitude").value = position.coords.longitude;
+                    document.forms[0].submit();
+                }, function(error) {
+                    let errorMessage = "Location access is required to confirm attendance.";
+                    switch (error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMessage += " User denied the request for Geolocation.";
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage += " Location information is unavailable.";
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage += " The request to get user location timed out.";
+                            break;
+                        case error.UNKNOWN_ERROR:
+                            errorMessage += " An unknown error occurred.";
+                            break;
+                    }
+                    console.error("Geolocation error:", errorMessage, error);
+                    alert(errorMessage);
+                });
+                return false;
+            } else {
+                const errorMessage = "Geolocation is not supported by your browser.";
+                console.error("Geolocation error:", errorMessage);
+                alert(errorMessage);
+                return false;
+            }
+        }
+    </script>
+</body>
+</html>

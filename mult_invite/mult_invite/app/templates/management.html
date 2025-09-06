@@ -1,0 +1,3024 @@
+{% extends "adm_base.html" %}
+
+{% block title %}Super Admin Dashboard - My App{% endblock %}
+
+{% block content %}
+
+    <div class="dashboard-header">
+        <div class="container">
+            <h1 class="mb-3">Super Admin Dashboard</h1>
+             <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+            <p class="lead">Manage all organizations, locations, administrators, invitees, and guests.</p>
+
+            <div class="row mt-4 justify-content-center">
+                <div class="col-md-2 col-sm-6 mb-3">
+                    <div class="card stats-card">
+                        <div class="card-body text-center">
+                            <i class="fas fa-building mb-2"></i>
+                            <h3 id="totalOrganizations">0</h3>
+                            <p class="mb-0">Organizations</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2 col-sm-6 mb-3">
+                    <div class="card stats-card">
+                        <div class="card-body text-center">
+                            <i class="fas fa-map-marker-alt mb-2"></i>
+                            <h3 id="totalLocations">0</h3>
+                            <p class="mb-0">Locations</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2 col-sm-6 mb-3">
+                    <div class="card stats-card">
+                        <div class="card-body text-center">
+                            <i class="fas fa-user-shield mb-2"></i>
+                            <h3 id="totalAdmins">0</h3>
+                            <p class="mb-0">Administrators</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2 col-sm-6 mb-3">
+                    <div class="card stats-card">
+                        <div class="card-body text-center">
+                            <i class="fas fa-user-plus mb-2"></i>
+                            <h3 id="totalInvitations">0</h3>
+                            <p class="mb-0">Pending Invites</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2 col-sm-6 mb-3">
+                    <div class="card stats-card">
+                        <div class="card-body text-center">
+                            <i class="fas fa-users-cog mb-2"></i>
+                            <h3 id="totalManagedInvitees">0</h3>
+                            <p class="mb-0">Invitees Attended</p>
+                        </div>
+                    </div>
+                </div>
+                   <div class="col-md-2 col-sm-6 mb-3">
+                    <div class="card stats-card">
+                        <div class="card-body text-center">
+                            <i class="fas fa-calendar-alt mb-2"></i>
+                            <h3 id="totalEvents">0</h3>
+                            <p class="mb-0">Events</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- section 2 -->
+
+    <div class="container py-4">
+    <ul class="nav nav-pills mb-4" id="managementTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="locations-tab" data-bs-toggle="pill" data-bs-target="#locations"
+                type="button" role="tab" aria-controls="locations" aria-selected="true">
+                <i class="fas fa-map-marker-alt me-2"></i>
+                Locations <span class="badge bg-secondary ms-1" id="locationsCount">0</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="admins-tab" data-bs-toggle="pill" data-bs-target="#admins" type="button"
+                role="tab" aria-controls="admins" aria-selected="false">
+                <i class="fas fa-user-shield me-2"></i>
+                Administrators <span class="badge bg-secondary ms-1" id="adminsCount">0</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="invitees-tab" data-bs-toggle="pill" data-bs-target="#pendingInvitation"
+                type="button" role="tab" aria-controls="pendingInvitation" aria-selected="false">
+                <i class="fas fa-user-plus me-2"></i>
+                Pending Invitations <span class="badge bg-secondary ms-1" id="pendingInvitationCount">0</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="managedInvitees-tab" data-bs-toggle="pill" data-bs-target="#managedInvitees" type="button"
+                role="tab" aria-controls="managedInvitees" aria-selected="false">
+                <i class="fas fa-users-cog me-2"></i>
+                Invitees <span class="badge bg-secondary ms-1" id="managedInviteesCount">0</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="events-tab" data-bs-toggle="pill" data-bs-target="#events" type="button"
+                role="tab" aria-controls="events" aria-selected="false">
+                <i class="fas fa-calendar-alt me-2"></i>
+                Events <span class="badge bg-secondary ms-1" id="eventsCount">0</span>
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="managementTabContent">
+        <div class="tab-pane fade show active" id="locations" role="tabpanel" aria-labelledby="locations-tab">
+            <div class="filter-section">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="locationSearch" class="form-label">Search Locations</label>
+                        <input type="text" class="form-control" id="locationSearch"
+                            placeholder="Search by name, address...">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="locationOrgFilter" class="form-label">Organization</label>
+                        <select class="form-select" id="locationOrgFilter">
+                            <option value="">All Organizations</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="locationStatusFilter" class="form-label">Status</label>
+                        <select class="form-select" id="locationStatusFilter">
+                            <option value="">All Status</option>
+                            <option value="true">Active</option>
+                            <option value="false">Inactive</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="locationDateFilter" class="form-label">Date Range</label>
+                        <select class="form-select" id="locationDateFilter">
+                            <option value="">All Time</option>
+                            <option value="today">Today</option>
+                            <option value="week">This Week</option>
+                            <option value="month">This Month</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button class="btn btn-custom me-2" onclick="applyLocationFilters()">
+                            <i class="fas fa-filter me-1"></i>
+                            Apply Filters
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="clearLocationFilters()">
+                            <i class="fas fa-times me-1"></i>
+                            Clear
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bulk-actions" id="locationBulkActions" style="display: none;">
+                <div class="d-flex align-items-center gap-3">
+                    <span><strong id="selectedLocationsCount">0</strong> location(s) selected</span>
+                    <button class="btn btn-sm btn-success" onclick="bulkToggleLocationStatus(true)">
+                        <i class="fas fa-check me-1"></i>
+                        Activate Selected
+                    </button>
+                    <button class="btn btn-sm btn-warning" onclick="bulkToggleLocationStatus(false)">
+                        <i class="fas fa-pause me-1"></i>
+                        Deactivate Selected
+                    </button>
+                   <button class="btn btn-sm btn-danger" onclick="bulkDeleteLocations()">
+                        <i class="fas fa-trash me-2"></i>
+                        Delete Selected
+                    </button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Locations</h5>
+                    <button class="btn btn-custom btn-sm" id="addLocationBtn" onclick="addNewLocation()">
+                        <i class="fas fa-plus me-1"></i>
+                        Add Location
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th width="40">
+                                        <input type="checkbox" class="form-check-input" id="selectAllLocations">
+                                    </th>
+                                    <th>Location</th>
+                                    <th>Organization</th>
+                                    <th>Address</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="locationsTable">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="admins" role="tabpanel" aria-labelledby="admins-tab">
+            <div class="filter-section">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="adminSearch" class="form-label">Search Administrators</label>
+                        <input type="text" class="form-control" id="adminSearch"
+                            placeholder="Search by name, email...">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="adminOrgFilter" class="form-label">Organization</label>
+                        <select class="form-select" id="adminOrgFilter">
+                            <option value="">All Organizations</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="adminRoleFilter" class="form-label">Role</label>
+                        <select class="form-select" id="adminRoleFilter">
+                            <option value="">All Roles</option>
+                            <option value="super_admin">Super Admin</option>
+                            <option value="org_admin">Org Admin</option>
+                            <option value="location_admin">location Admin</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="adminStatusFilter" class="form-label">Status</label>
+                        <select class="form-select" id="adminStatusFilter">
+                            <option value="">All Status</option>
+                            <option value="true">Active</option>
+                            <option value="false">Inactive</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button class="btn btn-custom me-2" onclick="applyAdminFilters()">
+                            <i class="fas fa-filter me-1"></i>
+                            Apply Filters
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="clearAdminFilters()">
+                            <i class="fas fa-times me-1"></i>
+                            Clear
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bulk-actions" id="adminBulkActions" style="display: none;">
+                <div class="d-flex align-items-center gap-3">
+                    <span><strong id="selectedAdminsCount">0</strong> administrator(s) selected</span>
+                    <button class="btn btn-sm btn-success" onclick="bulkToggleAdminStatus(true)">
+                        <i class="fas fa-user-check me-1"></i>
+                        Activate Selected
+                    </button>
+                    <button class="btn btn-sm btn-warning" onclick="bulkToggleAdminStatus(false)">
+                        <i class="fas fa-user-times me-1"></i>
+                        Deactivate Selected
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="bulkRemoveAdmins()">
+                        <i class="fas fa-user-minus me-2"></i>
+                        Remove Selected
+                    </button>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Administrators</h5>
+                    <button class="btn btn-custom btn-sm" id="inviteAdminBtn" onclick="inviteNewAdmin()">
+                        <i class="fas fa-user-plus me-1"></i>
+                        Invite Admin
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th width="40">
+                                        <input type="checkbox" class="form-check-input" id="selectAllAdmins">
+                                    </th>
+                                    <th>Administrator</th>
+                                    <th>Organization</th>
+                                    <th>Role</th>
+                                    <th>Status</th>
+                                    <th>Last Login</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adminsTable">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="pendingInvitation" role="tabpanel" aria-labelledby="invitees-tab">
+            <div class="filter-section">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="pendingInvitationSearch" class="form-label">Search Invitees</label>
+                        <input type="text" class="form-control" id="pendingInvitationSearch" placeholder="Search by email...">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="pendingInvitationOrgFilter" class="form-label">Organization</label>
+                        <select class="form-select" id="pendingInvitationOrgFilter">
+                            <option value="">All Organizations</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="pendingInvitationStatusFilter" class="form-label">Status</label>
+                        <select class="form-select" id="pendingInvitationStatusFilter">
+                            <option value="">All Status</option>
+                            <option value="pending">Pending</option>
+                            <option value="expired">Expired</option>
+                            <option value="accepted">Accepted</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="pendingInvitationInviterFilter" class="form-label">Invited By</label>
+                        <select class="form-select" id="pendingInvitationInviterFilter">
+                            <option value="">All Inviters</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button class="btn btn-custom me-2" onclick="applyPendingInvitationFilters()">
+                            <i class="fas fa-filter me-1"></i>
+                            Apply Filters
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="clearPendingInvitationFilters()">
+                            <i class="fas fa-times me-1"></i>
+                            Clear
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bulk-actions" id="pendingInvitationBulkActions" style="display: none;">
+    <div class="d-flex align-items-center gap-3">
+        <span><strong id="selectedpendingInvitationCount">0</strong> invitation(s) selected</span>
+        <!-- Cancel: Orange -->
+        <button class="btn btn-sm btn-warning" onclick="bulkCancelpendingInvitation()">
+            <i class="fas fa-times"></i> Cancel Selected
+        </button>
+        
+        <!-- Delete: Red -->
+        <button class="btn btn-sm btn-danger" onclick="bulkDeletePendingInvitations()">
+            <i class="fas fa-trash"></i> Delete Selected
+        </button>
+         <!-- Resend: Blue -->
+        <button class="btn btn-sm btn-primary" onclick="bulkresendPendingInvitation()">
+            <i class="fas fa-paper-plane"></i> Resend Selected
+        </button>
+    </div>
+</div>
+
+
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Pending Invitations</h5>
+                    <button class="btn btn-custom btn-sm" id="sendNewpendingInvitationBtn" onclick="sendNewpendingInvitation()">
+                        <i class="fas fa-envelope me-1"></i>
+                        Send Invite
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th width="40">
+                                        <input type="checkbox" class="form-check-input" id="selectAllPendingInvitation">
+                                    </th>
+                                    <th>Email</th>
+                                    <th>Organization</th>
+                                    <th>Role</th>
+                                    <th>Invited By</th>
+                                    <th>Sent Date</th>
+                                    <th>Expires</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>                                
+                            </thead>
+                            <tbody id="pendingInvitationTable">
+                            </tbody>
+                            </table>
+                         </div>
+                       </div>
+                    </div>
+                    </div>
+
+        <div class="tab-pane fade" id="managedInvitees" role="tabpanel" aria-labelledby="managedInvitees-tab">
+            <div class="filter-section">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="managedInviteeSearch" class="form-label">Search Invitees</label>
+                        <input type="text" class="form-control" id="managedInviteeSearch"
+                            placeholder="Search by name, email...">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="managedInviteeOrgFilter" class="form-label">Organization</label>
+                        <select class="form-select" id="managedInviteeOrgFilter">
+                            <option value="">All Organizations</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="managedInviteePositionFilter" class="form-label">Position</label>
+                        <select class="form-select" id="managedInviteePositionFilter">
+                            <option value="">All Position</option>
+                            <option value="Attendee">Attendee</option>
+                            <option value="Volunteer">Volunteer</option>
+                            <option value="Guest">Guest Minister</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="managedInviteeStatusFilter" class="form-label">Status</label>
+                        <select class="form-select" id="managedInviteeStatusFilter">
+                            <option value="">All Status</option>
+                            <option value="Absent">Absent</option>
+                            <option value="Present">Present</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button class="btn btn-custom me-2" onclick="applyManagedInviteeFilters()">
+                            <i class="fas fa-filter me-1"></i>
+                            Apply Filters
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="clearManagedInviteeFilters()">
+                            <i class="fas fa-times me-1"></i>
+                            Clear
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bulk-actions" id="managedInviteeBulkActions" style="display: none;">
+                <div class="d-flex align-items-center gap-3">
+                    <span><strong id="selectedManagedInviteesCount">0</strong> invitee(s) selected</span>
+                    <button class="btn btn-sm btn-danger" onclick= "bulkActionOnInvitees('delete')">Bulk Delete</button> 
+                    <button class="btn btn-sm btn-success" onclick="bulkActionOnInvitees('mark_present')">
+                        <i class="fas fa-check me-1"></i>   Bulk Present</button>
+                    <button class="btn btn-sm btn-warning" onclick="bulkActionOnInvitees('mark_absent')">
+                        <i class="fas fa-pause me-1"></i>   Bulk Absent      </button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Invitees/Guests</h5>
+                    <button class="btn btn-custom btn-sm" id="addManagedInviteeBtn" onclick="addNewManagedInvitee()">
+                        <i class="fas fa-user-plus me-1"></i>
+                        Add Invitee
+                    </button>
+                </div>
+
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th width="40">
+                                        <input type="checkbox" class="form-check-input" id="selectAllManagedInvitees">
+                                    </th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Phone Number</th>
+                                    <th>Organization</th>
+                                    <th>Position</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="managedInviteesTable">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="events" role="tabpanel" aria-labelledby="events-tab">
+            <div class="filter-section">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="eventSearch" class="form-label">Search Events</label>
+                        <input type="text" class="form-control" id="eventSearch" placeholder="Search by name...">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="eventOrgFilter" class="form-label">Organization</label>
+                        <select class="form-select" id="eventOrgFilter">
+                            <option value="">All Organizations</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="eventLocationFilter" class="form-label">Location</label>
+                        <select class="form-select" id="eventLocationFilter">
+                            <option value="">All Locations</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="eventStatusFilter" class="form-label">Status</label>
+                        <select class="form-select" id="eventStatusFilter">
+                            <option value="">All Status</option>
+                            <option value="upcoming">Upcoming</option>
+                            <option value="active">Active</option>
+                            <option value="past">Past</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button class="btn btn-custom me-2" onclick="applyEventFilters()">
+                            <i class="fas fa-filter me-1"></i>
+                            Apply Filters
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="clearEventFilters()">
+                            <i class="fas fa-times me-1"></i>
+                            Clear
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bulk-actions" id="eventBulkActions" style="display: none;">
+                <div class="d-flex align-items-center gap-3">
+                    <span><strong id="selectedEventsCount">0</strong> event(s) selected</span>
+                    <button class="btn btn-sm btn-success" onclick="bulkToggleEventStatus(true)">
+                        <i class="fas fa-check me-1"></i>
+                        Activate Selected
+                    </button>
+                    <button class="btn btn-sm btn-warning" onclick="bulkToggleEventStatus(false)">
+                        <i class="fas fa-pause me-1"></i>
+                        Deactivate Selected
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="bulkDeleteEvents()">
+                        <i class="fas fa-trash me-1"></i>
+                        Delete Selected
+                    </button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Events</h5>
+                    <button class="btn btn-custom btn-sm" id="addNewEventBtn" onclick="addNewEvent()">
+                        <i class="fas fa-plus me-1"></i>
+                        Add Event
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th width="40">
+                                        <input type="checkbox" class="form-check-input" id="selectAllEvents">
+                                    </th>
+                                    <th>Event Name</th>
+                                    <th>Organization</th>
+                                    <th>Location</th>
+                                    <th>Date/Time</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="eventsTable">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modalsContainer"></div>
+<div class="toast-container position-fixed top-0 end-0 p-3">
+    <div id="liveToast" class="toast hide" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+            <strong class="me-auto" id="toastHeader"></strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body" id="toastBody"></div>
+    </div>
+</div>
+
+<div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmationModalLabel">Confirm Action</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="confirmationModalBody">
+                Are you sure you want to perform this action?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmActionButton">Confirm</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{% endblock %}
+
+{% block scripts %}
+
+
+    <script>
+        
+    // === CSRF Token Retrieval and Fetch Wrapper ===
+
+    let globalCsrfToken = null; // Global variable to store the CSRF token
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const metaTag = document.querySelector('meta[name="csrf-token"]');
+        if (metaTag) {
+            globalCsrfToken = metaTag.getAttribute('content');
+            // console.log("CSRF Token loaded:", globalCsrfToken ? "..." + globalCsrfToken.slice(-5) : "null");
+        } else {
+            console.error("CSRF meta tag (name='csrf-token') not found in the HTML!");
+        }
+    });
+
+    /**
+     * Function to retrieve the CSRF token from the global variable.
+     * This function was missing and caused the 'csrfToken is not defined' error.
+     * @returns {string|null} The CSRF token or null if not found.
+     */
+    function getCsrfToken() {
+        return globalCsrfToken;
+    }
+
+    /**
+     * Custom fetch wrapper that automatically includes CSRF token for relevant requests.
+     * @param {string} url The URL to fetch.
+     * @param {Object} options The fetch options (method, headers, body, etc.).
+     * @returns {Promise<Response>} The fetch response.
+     */
+    async function fetchWithCsrf(url, options = {}) {
+        const method = options.method ? options.method.toUpperCase() : 'GET';
+        const csrfToken = getCsrfToken(); // Now this call will succeed
+
+        // Methods that typically require CSRF protection (modify data)
+        const methodsRequiringCsrf = ['POST', 'PUT', 'PATCH', 'DELETE'];
+
+        if (methodsRequiringCsrf.includes(method)) {
+            if (!csrfToken) {
+                console.error(`CSRF token missing for ${method} request to ${url}.`);
+                showToast("Error", "Security token missing. Please refresh the page.", "danger");
+                throw new Error("CSRF token not available. Refresh page."); // Stop the request
+            }
+
+            // Initialize headers if they don't exist
+            options.headers = options.headers || {};
+            
+            // Default to 'application/json' if body is present and Content-Type is not set
+            if (!options.headers['Content-Type'] && (typeof options.body === 'string' || typeof options.body === 'object')) {
+                options.headers['Content-Type'] = 'application/json';
+            }
+
+            // Add the CSRF token header
+            options.headers['X-CSRFToken'] = csrfToken;
+        }
+
+        try {
+            const response = await fetch(url, options);
+
+            if (!response.ok) {
+                const errorBody = await response.json().catch(() => ({ error: `HTTP error! Status: ${response.status}` }));
+                const errorMessage = errorBody.error || `Server responded with status ${response.status}`;
+                console.error(`API Error for ${url}:`, errorMessage, errorBody);
+                throw new Error(errorMessage);
+            }
+            return response; // Return the response object to be processed by the caller
+        } catch (error) {
+            console.error(`Network or fetch error for ${url}:`, error);
+            throw error; // Re-throw to propagate to the calling function
+        }
+    }
+
+
+    // === Utility Functions ===
+
+        /**
+         * Updates the display of selected i    count     bulk action visibility for a specific table.
+         * This fun      should be called whenever checkboxes within the table change state,
+           when the table is initially rendered.
+         *
+         *  m {string} tableId The ID of the table (e.g., 'invitesTable', 'managedInvitee    le').           * @param {string} selectedCountId The ID of the span element displaying the coun     g., 'selectedInvitesCount', 'selectedMana     viteesCount').
+         * @param {string} bulkActionsContainerId The ID of      ontainer for bulk actions (e.g., 'invitesBulkActions     anagedInviteesBulkActions').
+         */
+        function updateBulkActionsDisplay(tableId, selectedCountId, bulkActionsContainerId) {
+            const tableElement = document.getElementById(tableId);
+            if (!tableElement) {
+                console.warn(`Table with ID '${tableId}' not found for bulk actions update.`);
+                return;
+            }
+
+            // Selects all checked checkboxes within the specific table
+            const selectedCheckboxes = tableElement.querySelectorAll('.row-select-checkbox:checked');
+            const selectedCount = selectedCheckboxes.length;
+
+            const selectedCountElement = document.getElementById(selectedCountId);
+            const bulkActionsContainer = document.getElementById(bulkActionsContainerId);
+
+            // Update the selected count display
+            if (selectedCountElement) {
+                selectedCountElement.textContent = selectedCount;
+            } else {
+                console.warn(`Selected count element with ID '${selectedCountId}' not found.`);
+            }
+
+            // Show or hide the bulk actions container
+            if (bulkActionsContainer) {
+                if (selectedCount > 0) {
+                    bulkActionsContainer.style.display = 'flex'; // Use 'flex' for Bootstrap's d-flex layout
+                } else {
+                    bulkActionsContainer.style.display = 'none';
+                }
+            } else {
+                console.warn(`Bulk actions container with ID '${bulkActionsContainerId}' not found.`);
+            }
+        }
+
+            
+
+        // You might also need these if they aren't defined elsewhere.
+        // Example helper for capitalizing first letter:
+        function capitalizeFirstLetter(string) {
+            if (!string) return '';
+            return string.charAt(0).toUpperCase() + string.slice(1);
+        }
+
+        // Example helper for formatting date:
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            try {
+                const date = new Date(dateString);
+                return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            } catch (e) {
+                console.error("Error formatting date:", e);
+                return 'Invalid Date';
+            }
+        }
+
+        // Example helper for formatting date and time:
+        function formatDateTime(dateTimeString) {
+            if (!dateTimeString) return 'N/A';
+            try {
+                const date = new Date(dateTimeString);
+                return date.toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            } catch (e) {
+                console.error("Error formatting datetime:", e);
+                return 'Invalid Date/Time';
+            }
+          }   
+
+    // === Global Variables ===
+    
+    let organizations = []; // Holds all organization data
+    let locations = [];     // Holds all location data
+    let admins = [];        // Holds all administrator data
+    let invitations = [];   // Holds all invitation data (for inviting admins/users - Invitation model)
+    let managedInviteesData = [];    // Holds all Invitee model data (formerly guests)
+    let events = [];        // Holds all event data
+    
+    
+
+    let filteredData = { // Stores filtered data to be displayed
+        locations: [],
+        admins: [],
+        invitations: [], // Renamed
+        managedInvitees: [],
+        events: []
+    };
+
+    // API Base URL (adjust if your Flask app runs on a different port/domain)
+    const API_BASE = `${window.location.protocol}//${window.location.host}`;
+
+    // === Initialization ===
+    document.addEventListener('DOMContentLoaded', function () {
+        loadAllData();
+        setupEventListeners();
+    });
+
+
+    // === Data Loading Functions ===
+    async function loadAllData() {
+        showLoading(true, "Loading dashboard data...");
+        try {
+            await Promise.all([
+                loadOrganizations(),
+                loadLocations(),
+                loadAdmins(),
+                loadInvitations(),
+                loadManagedInviteesData(),
+                loadEvents()
+            ]);
+            updateDashboardCounts();
+            const activeTab = document.querySelector('#managementTabs .nav-link.active');
+            if (activeTab) {
+                const tabId = activeTab.id.replace('-tab', '');
+                renderTableForTab(tabId);
+            }
+        } catch (error) {
+            console.error("Error loading all data:", error);
+            showToast("Error", "Failed to load dashboard data. Please try again.", "danger");
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    async function loadOrganizations() {
+        try {
+            const response = await fetch(`${API_BASE}/api/admin/organizations`);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            organizations = await response.json();
+            populateOrganizationFilters();
+        } catch (error) {
+            console.error("Error loading organizations:", error);
+            showToast("Error", "Failed to load organizations.", "danger");
+        }
+    }
+
+    async function loadLocations() {
+        try {
+            const response = await fetch(`${API_BASE}/api/admin/locations`);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            locations = await response.json();
+            filteredData.locations = [...locations]; // Initialize filtered data
+            populateLocationFilters();
+        } catch (error) {
+            console.error("Error loading locations:", error);
+            showToast("Error", "Failed to load locations.", "danger");
+        }
+    }
+
+    async function loadAdmins() {
+        try {
+            const response = await fetch(`${API_BASE}/api/admin/administrators`);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            admins = await response.json();
+            filteredData.admins = [...admins]; // Initialize filtered data
+        } catch (error) {
+            console.error("Error loading administrators:", error);
+            showToast("Error", "Failed to load administrators.", "danger");
+        }
+    }
+
+    async function loadInvitations() {
+        try {
+            const response = await fetch(`${API_BASE}/api/admin/invitations`);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            invitations = await response.json();
+            console.log("invitations", invitations)
+            filteredData.invitations = [...invitations]; // Initialize filtered data
+
+        } catch (error) {
+            console.error("Error loading invitations:", error);
+            filteredData.invitations = [];
+            showToast("Error", "Failed to load pending invitations.", "danger");
+        }
+    }       
+
+
+    async function loadManagedInviteesData() {
+           try {
+        const response = await fetch(`${API_BASE}/api/admin/managed_invitees`);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        // Assign to managedInviteesData
+        managedInviteesData = await response.json();
+        // Initialize filteredData from managedInviteesData
+        filteredData.managedInvitees = [...managedInviteesData];
+        } catch (error) {
+            console.error("Error loading managed invitees:", error);
+            showToast("Error", "Failed to load invitees data.", "danger");
+        }
+    }
+
+    async function loadEvents() {
+        try {
+            const response = await fetch(`${API_BASE}/api/admin/events`);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            events = await response.json();
+            filteredData.events = [...events]; // Initialize filtered data
+       console.log("Events loaded successfully:", events.length, events); // ADD THIS LINE
+    } catch (error) {
+        console.error("Error loading events:", error);
+
+            showToast("Error", "Failed to load events.", "danger");
+        }
+    }
+
+    // === Dashboard Counts Update ===
+    function updateDashboardCounts() {
+        document.getElementById('totalOrganizations').textContent = organizations.length;
+        document.getElementById('totalLocations').textContent = locations.length;
+        document.getElementById('totalAdmins').textContent = admins.length;
+        if (document.getElementById('totalInvitations')) { // Changed from 'totalInvitees'
+            document.getElementById('totalInvitations').textContent = filteredData.invitations.filter(inv => inv.status === 'pending').length;
+        }
+       
+        document.getElementById('totalManagedInvitees').textContent = managedInviteesData.length;  // Change occured here
+        document.getElementById('totalEvents').textContent = events.length;
+
+
+        document.getElementById('locationsCount').textContent = filteredData.locations.length;
+        document.getElementById('adminsCount').textContent = filteredData.admins.length;
+        document.getElementById('pendingInvitationCount').textContent = filteredData.invitations.length;
+        
+        document.getElementById('managedInviteesCount').textContent = filteredData.managedInvitees.length;
+        document.getElementById('eventsCount').textContent = filteredData.events.length;
+    }
+
+    // === Event Listeners Setup ===
+    function setupEventListeners() {
+
+        // Tab switching
+        document.querySelectorAll('#managementTabs .nav-link').forEach(tabButton => {
+            tabButton.addEventListener('shown.bs.tab', function (event) {
+                const tabId = event.target.id.replace('-tab', '');
+                renderTableForTab(tabId);
+            });
+        });
+
+        // Search inputs
+        document.getElementById('locationSearch').addEventListener('input', applyLocationFilters);
+        document.getElementById('adminSearch').addEventListener('input', applyAdminFilters);
+        document.getElementById('pendingInvitationSearch').addEventListener('input', applyPendingInvitationFilters);
+        document.getElementById('managedInviteeSearch').addEventListener('input', applyManagedInviteeFilters);
+        document.getElementById('eventSearch').addEventListener('input', applyEventFilters);
+
+        // Filter selects (change event)
+        document.getElementById('locationOrgFilter').addEventListener('change', applyLocationFilters);
+        document.getElementById('locationStatusFilter').addEventListener('change', applyLocationFilters);
+        document.getElementById('locationDateFilter').addEventListener('change', applyLocationFilters);
+
+        document.getElementById('adminOrgFilter').addEventListener('change', applyAdminFilters);
+        document.getElementById('adminRoleFilter').addEventListener('change', applyAdminFilters);
+        document.getElementById('adminStatusFilter').addEventListener('change', applyAdminFilters);
+
+        // Filter listeners for Invitations (ensure your HTML filter elements have these IDs)
+        // document.getElementById('pendingInvitationSearch').addEventListener('keyup', applyPendingInvitationFilters); // Assuming you have this search input
+        // document.getElementById('eventSearch').addEventListener('keyup', applyEventFilters); // Assuming you have this search input
+
+
+
+        // Filter listeners for Invitations (ensure your HTML filter elements have these IDs)
+        document.getElementById('pendingInvitationOrgFilter').addEventListener('change', applyPendingInvitationFilters); // Corrected IDs
+        document.getElementById('pendingInvitationStatusFilter').addEventListener('change', applyPendingInvitationFilters); // Corrected IDs
+        document.getElementById('pendingInvitationInviterFilter').addEventListener('change', applyPendingInvitationFilters); // Corrected IDs
+
+        document.getElementById('managedInviteeOrgFilter').addEventListener('change', applyManagedInviteeFilters);
+        document.getElementById('managedInviteePositionFilter').addEventListener('change', applyManagedInviteeFilters);
+        document.getElementById('managedInviteeStatusFilter').addEventListener('change', applyManagedInviteeFilters);
+
+        document.getElementById('eventOrgFilter').addEventListener('change', applyEventFilters);
+        document.getElementById('eventLocationFilter').addEventListener('change', applyEventFilters);
+        document.getElementById('eventStatusFilter').addEventListener('change', applyEventFilters);
+
+
+ 
+        // Select All Checkboxes
+        document.getElementById('selectAllLocations').addEventListener('change', (e) => toggleAllCheckboxes(e.target.checked, 'locationsTable', 'selectedLocationsCount','locationBulkActions'));
+        document.getElementById('selectAllAdmins').addEventListener('change', (e) => toggleAllCheckboxes(e.target.checked, 'adminsTable', 'selectedAdminsCount','adminBulkActions'));
+        document.getElementById('selectAllPendingInvitation').addEventListener('change', (e) => toggleAllCheckboxes(e.target.checked, 'pendingInvitationTable', 'selectedpendingInvitationCount', 'pendingInvitationBulkActions')); // Corrected IDs and added bulk actions ID
+        document.getElementById('selectAllManagedInvitees').addEventListener('change', (e) => toggleAllCheckboxes(e.target.checked, 'managedInviteesTable', 'selectedManagedInviteesCount', 'managedInviteeBulkActions')); // Added bulk actions ID
+        document.getElementById('selectAllEvents').addEventListener('change', (e) => toggleAllCheckboxes(e.target.checked, 'eventsTable', 'selectedEventsCount', 'eventBulkActions')); // Added bulk actions ID
+
+
+        // Listen for individual checkbox changes to update select all and bulk action display
+        document.getElementById('locationsTable').addEventListener('change', (e) => handleIndividualCheckboxChange(e, 'locationsTable', 'selectAllLocation', 'selectedLocationsCount', 'locationBulkActions')); // Added bulk actions ID
+        document.getElementById('adminsTable').addEventListener('change', (e) => handleIndividualCheckboxChange(e, 'adminsTable', 'selectAllAdmins', 'selectedAdminsCount', 'adminBulkActions')); // Added bulk actions ID
+        document.getElementById('pendingInvitationTable').addEventListener('change', (e) => handleIndividualCheckboxChange(e, 'pendingInvitationTable', 'selectAllPendingInvitation', 'selectedpendingInvitationCount', 'pendingInvitationBulkActions')); // Corrected IDs and added bulk actions ID
+         
+
+        document.getElementById('managedInviteesTable').addEventListener('change', (e) => 
+        handleIndividualCheckboxChange(e, 'managedInviteesTable', 'selectAllManagedInvitees', 'selectedManagedInviteesCount', 'managedInviteeBulkActions')
+        )
+        document.getElementById('eventsTable').addEventListener('change', (e) => handleIndividualCheckboxChange(e, 'eventsTable', 'selectAllEvents', 'selectedEventsCount', 'eventBulkActions')); // Added bulk actions ID
+        }
+
+    function renderTableForTab(tabId) {
+        switch (tabId) {
+            case 'locations':
+                renderLocationsTable();
+                break;
+            case 'admins':
+                renderAdminsTable();
+                break;
+            case 'invitees':
+                renderPendingInvitationTable();
+                break;
+            case 'managedInvitees':
+                renderManagedInviteesTable();
+                break;
+            case 'events':
+                renderEventsTable();
+                break;
+            default:
+                break;
+        }
+    }
+
+    // === Rendering Functions for Tables ===
+    function renderLocationsTable() {
+        const tableBody = document.getElementById('locationsTable');
+        tableBody.innerHTML = ''; // Clear existing rows
+        document.getElementById('locationsCount').textContent = filteredData.locations.length;
+
+        if (filteredData.locations.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-3">No locations found.</td></tr>';
+            document.getElementById('locationBulkActions').style.display = 'none';
+            document.getElementById('selectAllLocations').checked = false;
+            document.getElementById('selectAllLocations').disabled = true;
+            return;
+        }
+
+        document.getElementById('selectAllLocations').disabled = false;
+        document.getElementById('locationBulkActions').style.display = 'flex';
+        document.getElementById('selectedLocationsCount').textContent = '0';
+
+        filteredData.locations.forEach(location => {
+            const row = tableBody.insertRow();
+            row.dataset.id = location.id; // Store ID for easy access
+
+            const statusClass = location.is_active ? 'badge bg-success' : 'badge bg-danger';
+            const statusText = location.is_active ? 'Active' : 'Inactive';
+
+            row.innerHTML = `
+                <td><input type="checkbox" class="form-check-input row-select-checkbox"></td>
+                <td>${location.name}</td>
+                <td>${location.organization.name || 'N/A'}</td>
+                <td>${location.address}</td>
+                <td><span class="${statusClass}">${statusText}</span></td>
+                <td>${new Date(location.created_at).toLocaleDateString()}</td>
+                <td>
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            Actions
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#" onclick="editLocation('${location.id}')"><i class="fas fa-edit me-2"></i>Edit</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="toggleLocationStatus('${location.id}', ${!location.is_active})"><i class="fas ${location.is_active ? 'fa-pause' : 'fa-check'} me-2"></i>${location.is_active ? 'Deactivate' : 'Activate'}</a></li>
+                            <li><a class="dropdown-item text-danger" href="#" onclick="deleteLocation('${location.id}')"><i class="fas fa-trash-alt me-2"></i>Delete</a></li>
+                        </ul>
+                    </div>
+                </td>
+            `;
+        });
+        updateBulkActionsDisplay('locationsTable', 'selectedLocationsCount', 'locationBulkActions');
+    }
+
+    function renderAdminsTable() {
+        const tableBody = document.getElementById('adminsTable');
+        tableBody.innerHTML = '';
+        document.getElementById('adminsCount').textContent = filteredData.admins.length;
+
+        if (filteredData.admins.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="8" class="text-center py-3">No administrators found.</td></tr>';
+            document.getElementById('adminBulkActions').style.display = 'none';
+            document.getElementById('selectAllAdmins').checked = false;
+            document.getElementById('selectAllAdmins').disabled = true;
+            return;
+        }
+
+        document.getElementById('selectAllAdmins').disabled = false;
+        document.getElementById('adminBulkActions').style.display = 'flex';
+        document.getElementById('selectedAdminsCount').textContent = '0';
+
+        filteredData.admins.forEach(admin => {
+            const row = tableBody.insertRow();
+            row.dataset.id = admin.id;
+
+            const statusClass = admin.is_active ? 'badge bg-success' : 'badge bg-danger';
+            const statusText = admin.is_active ? 'Active' : 'Inactive';
+
+            row.innerHTML = `
+                <td><input type="checkbox" class="form-check-input row-select-checkbox"></td>
+                <td>${admin.name || 'N/A'}</td>
+                <td>${admin.organization.name || 'N/A'}</td>
+                <td>${capitalizeFirstLetter(admin.role)}</td>
+                <td><span class="${statusClass}">${statusText}</span></td>
+                <td>${admin.last_login ? formatDateTime(admin.last_login) : 'Never'}</td>
+                <td>
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            Actions
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#" onclick="editAdmin('${admin.id}')"><i class="fas fa-edit me-2"></i>Edit</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="toggleAdminStatus('${admin.id}', ${!admin.is_active})"><i class="fas ${admin.is_active ? 'fa-user-times' : 'fa-user-check'} me-2"></i>${admin.is_active ? 'Deactivate' : 'Activate'}</a></li>
+                            <li><a class="dropdown-item text-danger" href="#" onclick="deleteAdmin('${admin.id}')"><i class="fas fa-user-minus me-2"></i>Remove</a></li>
+                        </ul>
+                    </div>
+                </td>
+            `;
+        });
+        updateBulkActionsDisplay('adminsTable', 'selectedAdminsCount', 'adminBulkActions');
+    }
+
+    // here is where the issues lies for invitations
+
+// --- Function for rendering Invitations ---
+
+    function renderPendingInvitationTable() { // Renamed function
+        const tableBody = document.getElementById('pendingInvitationTable'); // Corrected ID
+        tableBody.innerHTML = '';
+        document.getElementById('pendingInvitationCount').textContent = filteredData.invitations.length; // Corrected ID
+        // console.log("filteredData.invitations.length;", filteredData.invitations.length)
+
+        if (filteredData.invitations.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="9" class="text-center py-3">No pending invitations found.</td></tr>';
+            document.getElementById('pendingInvitationBulkActions').style.display = 'none'; // Corrected ID 
+            const bulkActions = document.getElementById('pendingInvitationBulkActions');
+            if (bulkActions) {
+                bulkActions.style.display = 'none';
+            }
+
+            const selectAll = document.getElementById('selectAllpendingInvitation');
+            if (selectAll) {
+                selectAll.checked = false;
+                selectAll.disabled = true;
+            }
+
+            return;
+                }
+
+        // If invitations exist:
+        const bulkActions = document.getElementById('pendingInvitationBulkActions');
+        if (bulkActions) {
+            bulkActions.style.display = 'flex';
+        }
+        const countSpan = document.getElementById('selectedpendingInvitationCount');
+        if (countSpan) {
+            countSpan.textContent = '0';
+        }
+        const selectAll = document.getElementById('selectAllpendingInvitation');
+        if (selectAll) {
+            selectAll.disabled = false;
+        }
+
+        filteredData.invitations.forEach(invitation => {
+            const row = tableBody.insertRow();
+            row.dataset.id = invitation.id;
+
+            let statusClass;
+            switch (invitation.status) {
+                case 'pending':
+                    statusClass = 'badge bg-warning';
+                    break;
+                case 'accepted':
+                    statusClass = 'badge bg-success';
+                    break;
+                case 'expired':
+                    statusClass = 'badge bg-danger';
+                    break;
+                default:
+                    statusClass = 'badge bg-secondary';
+            }
+
+            row.innerHTML = `
+                <td><input type="checkbox" class="form-check-input row-select-checkbox" value="${invitation.id}"></td>
+                <td>${invitation.email}</td>
+                <td>${invitation.organization ? invitation.organization.name : 'N/A'}</td>
+                <td>${capitalizeFirstLetter(invitation.role)}</td>
+                <td>${invitation.invited_by ? invitation.invited_by.name : 'N/A'}</td>
+                <td>${formatDate(invitation.sent_at)}</td>
+                <td>${invitation.expires_at ? formatDate(invitation.expires_at) : 'N/A'}</td>
+                <td><span class="${statusClass}">${capitalizeFirstLetter(invitation.status)}</span></td>
+                <td>
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            Actions
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#" onclick="resendPendingInvitation('${invitation.id}')"><i class="fas fa-paper-plane me-2"></i>Resend</a></li>
+                            <li><a class="dropdown-item text" href="#" onclick="cancelpendingInvitation('${invitation.id}')"><i class="fas fa-times me-2"></i>Cancel</a></li>
+                            <li><a class="dropdown-item text-danger" href="#" onclick="deletePendingInvitation('${invitation.id}')"><i class="fas fa-thrash me-2"></i>Delete</a></li>
+                        </ul>
+                    </div>
+                </td>
+            `;
+        });
+            // Call the generic bulk actions display update
+            updateBulkActionsDisplay('pendingInvitationTable', 'selectedpendingInvitationCount', 'pendingInvitationBulkActions');
+        }
+
+    
+    function renderEventsTable() {
+    const tableBody = document.getElementById('eventsTable'); 
+    tableBody.innerHTML = ''; // Clear existing rows
+
+    document.getElementById('eventsCount').textContent = filteredData.events.length;
+
+    if (filteredData.events.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-3">No events found.</td></tr>';
+        document.getElementById('eventBulkActions').style.display = 'none';
+        document.getElementById('selectAllEvents').checked = false;
+        document.getElementById('selectAllEvents').disabled = true;
+        return;
+    }
+
+    document.getElementById('selectAllEvents').disabled = false;
+    document.getElementById('eventBulkActions').style.display = 'none';  // Start hidden
+    document.getElementById('selectedEventsCount').textContent = '0';
+
+    filteredData.events.forEach(event => {
+        console.log("Processing event:", event);  // for debugging
+        const row = tableBody.insertRow();
+        row.dataset.id = event.id;
+
+        let statusClass, statusText;
+        const now = new Date();
+        const eventStart = new Date(event.start_time);
+        const eventEnd = new Date(event.end_time);
+
+            if (now < eventStart) {
+                statusClass = 'badge bg-primary';
+                statusText = 'Upcoming';
+            } else if (now >= eventStart && now <= eventEnd) {
+                statusClass = 'badge bg-success';
+                statusText = 'Active';
+            } else {
+                statusClass = 'badge bg-secondary';
+                statusText = 'Past';
+            }
+
+        row.innerHTML = `
+            <td><input type="checkbox" class="form-check-input row-select-checkbox"></td>
+            <td>${event.name || 'N/A'}</td>
+            <td>${event.organization.name || 'N/A'}</td>
+            <td>${event.location.name || 'N/A'}</td>
+            <td>${formatDateTime(event.start_time)} - ${formatDateTime(event.end_time)}</td>
+            <td><span class="${statusClass}">${statusText}</span></td>
+            <td>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Actions
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" onclick="editEvent('${event.id}')"><i class="fas fa-edit me-2"></i>Edit</a></li>
+                        <li><a class="dropdown-item" href="#" onclick="EventsToggle('${event.id}', ${!event.is_active})"><i class="fas ${event.is_active ? 'fa-pause' : 'fa-check'} me-2"></i>${event.is_active ? 'Deactivate' : 'Activate'}</a></li>
+                        <li><a class="dropdown-item text-danger" href="#" onclick="deleteEvent('${event.id}')"><i class="fas fa-trash-alt me-2"></i>Delete</a></li>
+                    </ul>
+                </div>
+            </td>
+        `;
+    });
+
+    updateBulkActionsDisplay('eventsTable', 'selectedEventsCount', 'eventBulkActions');
+         
+    }
+
+
+    // where the issues lies
+    function renderManagedInviteesTable() {
+    // This line will now correctly get the <tbody> element
+    const tableBody = document.getElementById('managedInviteesTable'); 
+    
+    tableBody.innerHTML = ''; // Clear existing rows
+    document.getElementById('managedInviteesCount').textContent = filteredData.managedInvitees.length;
+
+    if (filteredData.managedInvitees.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="8" class="text-center py-3">No invitees found.</td></tr>';
+        // These lines should now work as the elements will exist and be found
+        document.getElementById('managedInviteeBulkActions').style.display = 'none'; 
+        document.getElementById('selectAllManagedInvitees').checked = false;
+        document.getElementById('selectAllManagedInvitees').disabled = true;
+        return;
+    }
+
+    document.getElementById('selectAllManagedInvitees').disabled = false;
+    // These lines should now work
+    document.getElementById('managedInviteeBulkActions').style.display = 'flex'; 
+    document.getElementById('selectedManagedInviteesCount').textContent = '0';
+
+
+    filteredData.managedInvitees.forEach(invitee => {
+        console.log("Processing invitee:", invitee); // <-- Add this line
+        const row = tableBody.insertRow();
+        row.dataset.id = invitee.id;
+
+        const statusClass = invitee.confirmed === 'Present' ? 'badge bg-success' : 'badge bg-secondary';
+        const statusText = invitee.confirmed ?  'Present' : 'Absent';
+ 
+        row.innerHTML = `
+            <td><input type="checkbox" class="form-check-input row-select-checkbox"></td>
+            <td>${invitee.name || 'N/A'}</td>
+            <td>${invitee.email || 'N/A'}</td>
+            <td>${invitee.phone_number || 'N/A'}</td>
+            
+            <td>${invitee.organization ? invitee.organization.name : 'N/A'}</td>
+            <td>${invitee.position || 'N/A'}</td>
+            <td><span class="${statusClass}">${invitee.confirmed}</span></td>
+            <td>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Actions
+                    </button>
+                    <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="#" onclick="editManagedInvitee('${invitee.id}')"><i class="fas fa-edit me-2"></i>Edit</a></li>
+                     <li><a class="dropdown-item text-danger" href="#" onclick="deleteManagedInvitee('${invitee.id}')"><i class="fas fa-trash-alt me-2"></i>Delete</a></li>
+                    </ul>
+                </div>
+            </td>
+        `;
+    });
+    // Make sure this call uses the correct IDs too
+    updateBulkActionsDisplay('managedInviteesTable', 'selectedManagedInviteesCount', 'managedInviteeBulkActions');
+    }
+
+
+    // === Filter Functions ===
+    function applyLocationFilters() {
+        const searchTerm = document.getElementById('locationSearch').value.toLowerCase();
+        const orgFilter = document.getElementById('locationOrgFilter').value;
+        const statusFilter = document.getElementById('locationStatusFilter').value;
+        const dateFilter = document.getElementById('locationDateFilter').value;
+
+        filteredData.locations = locations.filter(location => {
+            const matchesSearch = location.name.toLowerCase().includes(searchTerm) ||
+                                  location.address.toLowerCase().includes(searchTerm);
+            const matchesOrg = orgFilter === '' || location.organization_id === orgFilter;
+            const matchesStatus = statusFilter === '' || String(location.is_active) === statusFilter;
+
+            let matchesDate = true;
+            if (dateFilter !== '') {
+                const createdAt = new Date(location.created_at);
+                const now = new Date();
+                switch (dateFilter) {
+                    case 'today':
+                        matchesDate = createdAt.toDateString() === now.toDateString();
+                        break;
+                    case 'week':
+                        const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+                        matchesDate = createdAt >= firstDayOfWeek;
+                        break;
+                    case 'month':
+                        matchesDate = createdAt.getMonth() === now.getMonth() && createdAt.getFullYear() === now.getFullYear();
+                        break;
+                }
+            }
+            return matchesSearch && matchesOrg && matchesStatus && matchesDate;
+        });
+        renderLocationsTable();
+    }
+
+    function clearLocationFilters() {
+        document.getElementById('locationSearch').value = '';
+        document.getElementById('locationOrgFilter').value = '';
+        document.getElementById('locationStatusFilter').value = '';
+        document.getElementById('locationDateFilter').value = '';
+        applyLocationFilters();
+    }
+
+    function applyAdminFilters() {
+        const searchTerm = document.getElementById('adminSearch').value.toLowerCase();
+        const orgFilter = document.getElementById('adminOrgFilter').value;
+        const roleFilter = document.getElementById('adminRoleFilter').value;
+        const statusFilter = document.getElementById('adminStatusFilter').value;
+
+        filteredData.admins = admins.filter(admin => {
+            const matchesSearch = (admin.name && admin.name.toLowerCase().includes(searchTerm)) ||
+                                  (admin.email && admin.email.toLowerCase().includes(searchTerm));
+            const matchesOrg = orgFilter === '' || admin.organization_id === orgFilter;
+            const matchesRole = roleFilter === '' || admin.role === roleFilter;
+            const matchesStatus = statusFilter === '' || String(admin.is_active) === statusFilter;
+            return matchesSearch && matchesOrg && matchesRole && matchesStatus;
+        });
+        renderAdminsTable();
+    }
+
+    function clearAdminFilters() {
+        document.getElementById('adminSearch').value = '';
+        document.getElementById('adminOrgFilter').value = '';
+        document.getElementById('adminRoleFilter').value = '';
+        document.getElementById('adminStatusFilter').value = '';
+        applyAdminFilters();
+    }
+
+    // Function for applying filters to Invitations
+    function applyPendingInvitationFilters() { // Renamed function
+        const searchTerm = document.getElementById('pendingInvitationSearch').value.toLowerCase(); // Corrected ID
+        const orgFilter = document.getElementById('pendingInvitationOrgFilter').value; // Corrected ID
+        const statusFilter = document.getElementById('pendingInvitationStatusFilter').value; // Corrected ID
+        const inviterFilter = document.getElementById('pendingInvitationInviterFilter').value; // Corrected ID
+
+        filteredData.invitations = invitations.filter(invite => {
+            const matchesSearch = invite.email.toLowerCase().includes(searchTerm);
+            const matchesOrg = orgFilter === '' || invite.organization_id === orgFilter;
+            const matchesStatus = statusFilter === '' || invite.status === statusFilter;
+            const matchesInviter = inviterFilter === '' || invite.invited_by_id === inviterFilter;
+            return matchesSearch && matchesOrg && matchesStatus && matchesInviter;
+        });
+        renderPendingInvitationTable(); // Calls the renamed render function
+    }
+
+   // Function for clearing filters for Invitations
+    function clearPendingInvitationFilters() { // Renamed function
+        document.getElementById('pendingInvitationSearch').value = ''; // Corrected ID
+        document.getElementById('pendingInvitationOrgFilter').value = ''; // Corrected ID
+        document.getElementById('pendingInvitationStatusFilter').value = ''; // Corrected ID
+        document.getElementById('pendingInvitationInviterFilter').value = ''; // Corrected ID
+    applyPendingInvitationFilters(); // Calls the renamed apply filters function
+    }
+
+    function applyManagedInviteeFilters() {
+        const searchTerm = document.getElementById('managedInviteeSearch').value.toLowerCase();
+        const orgFilter = document.getElementById('managedInviteeOrgFilter').value;
+        const positionFilter = document.getElementById('managedInviteePositionFilter').value;
+        const statusFilter = document.getElementById('managedInviteeStatusFilter').value;
+
+        filteredData.managedInvitees = managedInviteesData.filter(invitee => {
+            const matchesSearch = (invitee.name && invitee.name.toLowerCase().includes(searchTerm)) ||
+                                  (invitee.email && invitee.email.toLowerCase().includes(searchTerm));
+            const matchesOrg = orgFilter === '' || invitee.organization_id === orgFilter;
+            const matchesPosition = positionFilter === '' || invitee.position === positionFilter;
+            const matchesStatus = statusFilter === '' || invitee.status === statusFilter;
+            return matchesSearch && matchesOrg && matchesPosition && matchesStatus;
+        });
+
+        renderManagedInviteesTable();
+    }
+
+
+    function clearManagedInviteeFilters() {
+        document.getElementById('managedInviteeSearch').value = '';
+        document.getElementById('managedInviteeOrgFilter').value = '';
+        document.getElementById('managedInviteePositionFilter').value = '';
+        document.getElementById('managedInviteeStatusFilter').value = '';
+        applyManagedInviteeFilters();
+    }
+
+    function applyEventFilters() {
+        const searchTerm = document.getElementById('eventSearch').value.toLowerCase();
+        const orgFilter = document.getElementById('eventOrgFilter').value;
+        const locationFilter = document.getElementById('eventLocationFilter').value;
+        const statusFilter = document.getElementById('eventStatusFilter').value;
+
+        filteredData.events = events.filter(event => {
+            const matchesSearch = event.name.toLowerCase().includes(searchTerm);
+            const matchesOrg = orgFilter === '' || event.organization_id === orgFilter;
+            const matchesLocation = locationFilter === '' || event.location_id === locationFilter;
+            
+            let matchesStatus = true;
+            if (statusFilter !== '') {
+                const now = new Date();
+                const eventStart = new Date(event.start_time);
+                const eventEnd = new Date(event.end_time);
+
+                if (statusFilter === 'upcoming') {
+                    matchesStatus = now < eventStart;
+                } else if (statusFilter === 'active') {
+                    matchesStatus = now >= eventStart && now <= eventEnd;
+                } else if (statusFilter === 'past') {
+                    matchesStatus = now > eventEnd;
+                }
+            }
+            return matchesSearch && matchesOrg && matchesLocation && matchesStatus;
+        });
+        renderEventsTable();
+    }
+
+    function clearEventFilters() {
+        document.getElementById('eventSearch').value = '';
+        document.getElementById('eventOrgFilter').value = '';
+        document.getElementById('eventLocationFilter').value = '';
+        document.getElementById('eventStatusFilter').value = '';
+        applyEventFilters();
+    }
+
+    
+    // === Checkbox and Bulk Actions Logic ===
+
+    function toggleAllCheckboxes(isChecked, tableId, countId, bulkActionId) {
+    const checkboxes = document.querySelectorAll(`#${tableId} .form-check-input.row-select-checkbox`);
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = isChecked;
+    });
+    updateSelectedCountExplicit(tableId, countId, bulkActionId);
+    }
+
+    function handleIndividualCheckboxChange(event,tableId, selectAllId, countId,countSpanId, bulkActionsId) {
+        if (event.target.classList.contains('row-select-checkbox')) {
+            updateSelectedCountExplicit(tableId, countId,bulkActionsId);
+            const allCheckboxes = document.querySelectorAll(`#${tableId} .form-check-input.row-select-checkbox`);
+            const checkedCheckboxes = document.querySelectorAll(`#${tableId} .form-check-input.row-select-checkbox:checked`);
+            document.getElementById(selectAllId).checked = allCheckboxes.length > 0 && allCheckboxes.length === checkedCheckboxes.length;
+        }
+    }
+
+
+    function updateSelectedCountExplicit(tableId, countId, bulkActionId) {
+    const checkedCheckboxes = document.querySelectorAll(`#${tableId} .form-check-input.row-select-checkbox:checked`);
+    document.getElementById(countId).textContent = checkedCheckboxes.length;
+
+    const bulkActionsDiv = document.getElementById(bulkActionId); // ✅ Use explicit ID passed
+    if (bulkActionsDiv) {
+        bulkActionsDiv.style.display = checkedCheckboxes.length > 0 ? 'flex' : 'none';
+    }
+}
+
+   
+    function getSelectedIds(tableId) {
+    const checkedCheckboxes = document.querySelectorAll(`#${tableId} .form-check-input.row-select-checkbox:checked`);
+    return Array.from(checkedCheckboxes).map(checkbox => checkbox.closest('tr').dataset.id);
+    }
+
+    function confirmAction(message, callback) {
+        const modal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+        document.getElementById('confirmationModalBody').textContent = message;
+        document.getElementById('confirmActionButton').onclick = () => {
+            modal.hide();
+            callback();
+        };
+        modal.show();
+    }
+
+
+    // ==============MANAGED INVITEES/GUEST=============//
+
+
+ // === Individual Action Functions ===
+      
+
+    // --- Managed Invitees ---
+    async function editManagedInvitee(inviteeId) {
+
+        const numericinviteeId = parseInt(inviteeId, 10); 
+
+        const invitee = managedInviteesData.find(i => i.id === numericinviteeId);
+        if (!invitee) {
+            showToast("Error", "Invitee not found.", "danger");
+            return;
+        }
+        createEditManagedInviteeModal(invitee);
+    }
+
+// ind delete
+    async function deleteManagedInvitee(inviteeId) {
+        confirmAction("Are you sure you want to delete this invitee? This action cannot be undone.", async () => {
+            showLoading(true, "Deleting invitee...");
+            try {
+                // Use fetchWithCsrf
+                const response = await fetchWithCsrf(`${API_BASE}/api/admin/managed_invitees/${inviteeId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+                await loadManagedInviteesData();
+                renderManagedInviteesTable();
+                updateDashboardCounts();
+                showToast("Success", "Invitee deleted successfully.", "success");
+            } catch (error) {
+                console.error("Error deleting invitee:", error);
+                showToast("Error", `Failed to delete invitee: ${error.message}`, "danger");
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+
+// /=============
+
+
+     // managedInvites bulk delete action
+
+        function bulkActionOnInvitees(action){
+        const selectedIds = getSelectedIds('managedInviteesTable'); 
+        if (selectedIds.length === 0) {
+            showToast("Warning", "No invitee Selected.", "warning");
+            return;
+        }
+          
+        confirmAction("Are you sure you want to delete the selected Invitees? This action cannot be undone.", async () => {
+            showLoading(true, "Deleting selected Invitees...");
+            try {
+
+                 // Use fetchWithCsrf
+                const response = await fetchWithCsrf(`${API_BASE}/api/admin/managed_invitees/bulk-action`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                     
+                    body: JSON.stringify({ invitee_ids: selectedIds})
+                }); 
+                
+                const data = await response.json();
+                
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                await loadManagedInviteesData();
+                renderManagedInviteesTable();
+                             
+                let message = `${data.deleted} invitee(s) deleted.`;
+                if (data.skipped && data.skipped.length > 0) {
+                message += ` ${data.skipped.length} skipped.`;
+                console.warn("Skipped:", data.skipped);
+                 }
+                showToast("Success", message, "success");
+
+                // showToast("Success", `Selected Invitees ${actionText}d successfully.`, "success");
+            } catch (error) {
+                console.error(`Error bulk ${actionText} Invitees:`, error);
+                showToast("Error", `Failed to ${actionText} selected Invitees.`, "danger");
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+    function bulkActionOnInvitees(action) {
+    const selectedIds = getSelectedIds('managedInviteesTable'); 
+    if (selectedIds.length === 0) {
+        showToast("Warning", "No invitees selected.", "warning");
+        return;
+    }
+
+    const actionTextMap = {
+        delete: "delete",
+        mark_present: "mark as present",
+        mark_absent: "mark as absent"
+    };
+
+    const actionText = actionTextMap[action] || action;
+
+    confirmAction(`Are you sure you want to ${actionText} the selected invitees?`, async () => {
+        showLoading(true, `${actionText.charAt(0).toUpperCase() + actionText.slice(1)}ing selected invitees...`);
+        try {
+            const response = await fetchWithCsrf(`${API_BASE}/api/admin/managed_invitees/bulk-action`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ invitee_ids: selectedIds, action: action })
+            }); 
+
+            const data = await response.json();
+
+            if (!response.ok) throw new Error(data.error || `HTTP error! status: ${response.status}`);
+            
+             await loadManagedInviteesData();
+            updateBulkActionsDisplay(); // Update bulk actions display if relevant
+            renderManagedInviteesTable();
+               
+
+            let message = "";
+            if (action === "delete") {
+                message = `${data.deleted?.length || 0} invitee(s) deleted.`;
+            } else if (action === "mark_present" || action === "mark_absent") {
+                message = `${data.updated?.length || 0} invitee(s) updated.`;
+            }
+
+            if (data.skipped && data.skipped.length > 0) {
+                message += ` ${data.skipped.length} skipped.`;
+                console.warn("Skipped:", data.skipped);
+            }
+
+            showToast("Success", message, "success");
+
+            } catch (error) {
+                console.error(`Error bulk ${actionText} invitees:`, error);
+                showToast("Error", `Failed to ${actionText} selected invitees.`, "danger");
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+
+    // ==========LOCATION============================//
+
+    // --- Locations ---
+    async function toggleLocationStatus(locationId, isActive) {
+        const actionText = isActive ? "activate" : "deactivate";
+        const actionVerb = isActive ? "activating" : "deactivating";
+        confirmAction(`Are you sure you want to ${actionText} this location?`, async () => {
+            showLoading(true, ` ${actionVerb} location...`);
+            try {
+               // Use fetchWithCsrf
+                const response = await fetchWithCsrf(`${API_BASE}/api/admin/locations/${locationId}/toggle-status`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                   
+                    body: JSON.stringify({ is_active: isActive })
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+                await loadLocations();
+                renderLocationsTable();
+                showToast("Success", `Location ${actionText}d successfully.`, "success");
+            } catch (error) {
+                console.error(`Error ${actionVerb} location:`, error);
+                showToast("Error", `Failed to ${actionText} location: ${error.message}`, "danger");
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+// edit location
+    async function editLocation(locationId) {
+    // Ensure locationId is a number for strict comparison (e.g., if passed as a string from HTML data attribute)
+    const numericLocationId = parseInt(locationId, 10); 
+
+    // Use the numeric ID to find the location in your 'locations' array
+    const location = locations.find(loc => loc.id === numericLocationId); 
+
+    if (!location) {
+        console.error(`Location with ID ${locationId} (converted to ${numericLocationId}) not found in 'locations' array. Current 'locations' array:`, locations);
+        showToast("Error", "Location not found.", "danger"); // This is the toast message you mentioned
+        return;
+    }
+    createEditLocationModal(location); // This line will now successfully pass the 'location' object
+}
+
+
+    async function deleteLocation(locationId) {
+        confirmAction("Are you sure you want to delete this location? This action cannot be undone.", async () => {
+            showLoading(true, "Deleting location...");
+            try {
+                 // Use fetchWithCsrf
+                const response = await fetchWithCsrf(`${API_BASE}/api/admin/locations/${locationId}`, {
+                    method: 'DELETE',
+                    // headers: { 'Content-Type': 'application/json' },
+                   
+                 });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+                await loadLocations();
+                renderLocationsTable();
+                updateDashboardCounts();
+                showToast("Success", "Location deleted successfully.", "success");
+            } catch (error) {
+                console.error("Error deleting location:", error);
+                showToast("Error", `Failed to delete location: ${error.message}`, "danger");
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+
+    // --- Locations Bulk Actions ---
+    function bulkToggleLocationStatus(isActive) {
+        const selectedIds = getSelectedIds('locationsTable');
+        if (selectedIds.length === 0) {
+            showToast("Warning", "No locations selected.", "warning");
+            return;
+        }
+        const actionText = isActive ? "activate" : "deactivate";
+        const actionVerb = isActive ? "Activating" : "Deactivating";
+        confirmAction(`Are you sure you want to ${actionText} the selected locations?`, async () => {
+            showLoading(true, ` ${actionVerb}selected locations...`);
+            try {
+                const response = await fetchWithCsrf(`${API_BASE}/api/admin/locations/bulk-action`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                      
+                    body: JSON.stringify({ location_ids: selectedIds, action : isActive ? "activate" : "deactivate"})
+                });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                await loadLocations();
+                renderLocationsTable();
+                updateDashboardCounts();
+                showToast("Success", `Selected locations ${actionText}d successfully.`, "success");
+            } catch (error) {
+                console.error(`Error bulk ${actionVerb} locations:`, error);
+                showToast("Error", `Failed to ${actionText} selected locations.`, "danger");
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+
+    function bulkDeleteLocations(action) {
+        const selectedIds = getSelectedIds('locationsTable');
+        if (selectedIds.length === 0) {
+            showToast("Warning", "No locations selected.", "warning");
+            return;
+        }
+        confirmAction("Are you sure you want to delete the selected locations? This action cannot be undone.", async () => {
+            showLoading(true, "Deleting selected locations...");
+            try {
+
+                 // Use fetchWithCsrf
+                const response = await fetchWithCsrf(`${API_BASE}/api/admin/locations/bulk-action`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                     
+                    body: JSON.stringify({ location_ids: selectedIds, action : "delete" })
+                });           
+                const data = await response.json();
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                await loadLocations();
+                renderLocationsTable();
+                updateDashboardCounts();
+                
+                let message = `${data.deleted.length} Location(s) deleted.`;
+                if (data.skipped && data.skipped.length > 0) {
+                message += ` ${data.skipped.length} skipped.`;
+                console.warn("Skipped:", data.skipped);
+                 }
+                showToast("Success", message, "success");
+                // showToast("Success", "Selected locations deleted successfully.", "success");
+            } catch (error) {
+                console.error("Error bulk deleting locations:", error);
+                showToast("Error", "Failed to delete selected locations.", "danger");
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+    // ==============ADMIN FUNCTIONS ====================//
+
+    // --- Admins Bulk Actions ---
+    function bulkToggleAdminStatus(isActive) {
+        const selectedIds = getSelectedIds('adminsTable');
+        if (selectedIds.length === 0) {
+            showToast("Warning", "No administrators selected.", "warning");
+            return;
+        }
+        const actionText = isActive ? "activate" : "deactivate";
+        const actionVerb = isActive ? "Activating" : "Deactivating";
+        confirmAction(`Are you sure you want to ${actionText} the selected administrators?`, async () => {
+            showLoading(true, `${actionVerb} selected administrators...`);
+            try {
+                // Use fetchWithCsrf
+                const response = await fetchWithCsrf(`${API_BASE}/api/admin/administrators/bulk-action`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                     
+                    body: JSON.stringify({ admin_ids: selectedIds, action: isActive ? "activate" : "deactivate" })
+                });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                await loadAdmins();
+                renderAdminsTable();
+                updateDashboardCounts();
+                showToast("Success", `Selected administrators ${actionText}d successfully.`, "success");
+            } catch (error) {
+                console.error(`Error bulk ${actionText} of administrators:`, error);
+                showToast("Error", `Failed to ${actionText} selected administrators.`, "danger");
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+    function bulkRemoveAdmins(action) {
+        const selectedIds = getSelectedIds('adminsTable');
+        if (selectedIds.length === 0) {
+            showToast("Warning", "No administrators selected.", "warning");
+            return;
+        }
+        confirmAction("Are you sure you want to remove the selected administrators? This action cannot be undone.", async () => {
+            showLoading(true, "Removing selected administrators...");
+            try {
+                // Use fetchWithCsrf
+                const response = await fetchWithCsrf(`${API_BASE}/api/admin/administrators/bulk-action`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                   
+                    body: JSON.stringify({ admin_ids: selectedIds, action : 'delete' })
+                });
+                // Pass json data in from here.
+                const data = await response.json();
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                await loadAdmins();
+                renderAdminsTable();
+                updateDashboardCounts();
+                
+                let message = `${data.deleted.length} Administrator(s) deleted.`;
+                if (data.skipped && data.skipped.length > 0) {
+                message += ` ${data.skipped.length} skipped.`;
+                console.warn("Skipped:", data.skipped);
+                 }
+                showToast("Success", message, "success");
+                // showToast("Success", "Selected administrators removed successfully.", "success");
+            } catch (error) {
+                console.error("Error bulk removing administrators:", error);
+                showToast("Error", "Failed to remove selected administrators.", "danger");
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+    // --- Admins ---
+    async function toggleAdminStatus(adminId, isActive) {
+        const actionText = isActive ? "activate" : "deactivate";
+        confirmAction(`Are you sure you want to ${actionText} this administrator?`, async () => {
+            showLoading(true, `${actionText}ing administrator...`);
+            try {
+                // Use fetchWithCsrf
+                const response = await fetchWithCsrf(`${API_BASE}/api/admin/administrators/${adminId}/toggle-status`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    
+                    body: JSON.stringify({ is_active: isActive })
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+                await loadAdmins();
+                renderAdminsTable();
+                showToast("Success", `Administrator ${actionText}d successfully.`, "success");
+            } catch (error) {
+                console.error(`Error ${actionText}ing administrator:`, error);
+                showToast("Error", `Failed to ${actionText} administrator: ${error.message}`, "danger");
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+    
+    // edit administrator 
+    async function editAdmin(adminId) {
+    // Ensure locationId is a number for strict comparison (e.g., if passed as a string from HTML data attribute)
+    const numericadminId = parseInt(adminId, 10); 
+    // Use the numeric ID to find the location in your 'locations' array
+    const admin = admins.find(adm => adm.id === numericadminId); 
+
+    if (!admin) {
+        console.error(`admin with ID ${adminId} (converted to ${numericadminId}) not found in 'Administrators' array. Current 'admins' array:`, admins);
+        showToast("Error", "Administrator not found.", "danger"); // This is the toast message you mentioned
+        return;
+    }
+     createEditAdminModal(admin); // This line will now successfully pass the 'Admin object
+    }
+
+// individual admin delete
+    async function deleteAdmin(adminId) {
+        confirmAction("Are you sure you want to remove this administrator? This action cannot be undone.", async () => {
+            showLoading(true, "Removing administrator...");
+            try {
+                // Use fetchWithCsrf
+                const response = await fetchWithCsrf(`${API_BASE}/api/admin/administrators/${adminId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+                await loadAdmins();
+                renderAdminsTable();
+                updateDashboardCounts();
+                showToast("Success", "Administrator removed successfully.", "success");
+            } catch (error) {
+                console.error("Error removing administrator:", error);
+                showToast("Error", `Failed to remove administrator: ${error.message}`, "danger");
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+
+// ============INVITATIONS/PENDING INVITATIONS ================//
+
+    // --- Invitations Bulk Actions ---
+    function bulkresendPendingInvitation() {
+        const selectedIds = getSelectedIds('pendingInvitationTable');
+        if (selectedIds.length === 0) {
+            showToast("Warning", "No invitation selected.", "warning");
+            return;
+        }
+        confirmAction("Are you sure you want to resend the selected invitations?", async () => {
+            showLoading(true, "Resending selected invitations...");
+            try {
+                // Use fetchWithCsrf bulk action  RESEND
+                const response = await fetchWithCsrf(`${API_BASE}/api/admin/invitations/bulk-action`, {
+                    method: 'POST',
+                    // headers: { 'Content-Type': 'application/json' },
+
+                    body: JSON.stringify({ ids: selectedIds,
+                                             action: 'resend'
+                             })
+                });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                await loadInvitations();
+                renderPendingInvitationTable();
+                updateDashboardCounts();
+                showToast("Success", "Selected invitations resent successfully.", "success");
+            } catch (error) {
+                console.error("Error bulk resending invites:", error);
+                showToast("Error", "Failed to resend selected invitations.", "danger");
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+    function bulkCancelpendingInvitation() {
+        const selectedIds = getSelectedIds('pendingInvitationTable');
+        if (selectedIds.length === 0) {
+            showToast("Warning", "No invitation selected.", "warning");
+            return;
+        }
+        confirmAction("Are you sure you want to cancel the selected invitations? This action cannot be undone.", async () => {
+            showLoading(true, "Cancelling selected invitations...");
+            try {
+                // bulk cancel
+                const response = await fetchWithCsrf(`${API_BASE}/api/admin/invitations/bulk-action`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: selectedIds,
+                                         action: 'cancel',
+                    })
+                });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                await loadInvitations();
+                renderPendingInvitationTable();
+                updateDashboardCounts();
+                showToast("Success", "Selected invitations cancelled successfully.", "success");
+            } catch (error) {
+                console.error("Error bulk cancelling invites:", error);
+                showToast("Error", "Failed to cancel selected invitations.", "danger");
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+    
+    // --- Invitations 1 ---
+    async function resendPendingInvitation(invitationId) {
+        confirmAction("Are you sure you want to resend this invitation?", async () => {
+            showLoading(true, "Resending invitation...");
+            try {
+                // Use fetchWithCsrf individual resend
+                const response = await fetchWithCsrf(`${API_BASE}/api/admin/invitations/${invitationId}/resend`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+                await loadInvitations();
+                renderPendingInvitationTable();
+                showToast("Success", "Invitation resent successfully.", "success");
+            } catch (error) {
+                console.error("Error resending invitation:", error);
+                showToast("Error", `Failed to resend invitation: ${error.message}`, "danger");
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+        // Individual cancel
+    async function cancelpendingInvitation(invitationId) {
+        confirmAction("Are you sure you want to cancel this invitation? This action cannot be undone.", async () => {
+            showLoading(true, "Cancelling invitation...");
+            try {
+                // Use fetchWithCsrf  Individual cancel
+                const response = await fetchWithCsrf(`${API_BASE}/api/admin/invitations/${invitationId}/cancel`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                     
+                    body: JSON.stringify({ id: invitationId })
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+
+                if (result.message === "Invitation already cancelled.") {
+                showToast("Info", "Invitation has already been cancelled.", "info");
+                } 
+                else {
+                    showToast("Success", result.message || "Invitation cancelled successfully.", "success");
+                }
+                await loadInvitations();
+                renderPendingInvitationTable();
+                updateDashboardCounts();
+                showToast("Success", "Invitation cancelled successfully.", "success");
+            } catch (error) {
+                console.error("Error cancelling invitation:", error);
+                showToast("Error", `Failed to cancel invitation: ${error.message}`, "danger");
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+    // deletion individual 
+    async function deletePendingInvitation(invitationId) {
+    confirmAction("Are you sure you want to delete this invitation? This action cannot be undone.", async () => {
+        showLoading(true, "Deleting invitation...");
+        try {
+            // Use fetchWithCsrf for individual delete
+            const response = await fetchWithCsrf(`${API_BASE}/api/admin/invitations/${invitationId}/delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: invitationId })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            await loadInvitations();
+            renderPendingInvitationTable();
+            updateDashboardCounts();
+            showToast("Success", "Invitation deleted successfully.", "success");
+
+        } catch (error) {
+            console.error("Error deleting invitation:", error);
+            showToast("Error", `Failed to delete invitation: ${error.message}`, "danger");
+        } finally {
+            showLoading(false);
+        }
+    });
+}
+
+// 
+    async function bulkDeletePendingInvitations() {
+    const selectedIds = getSelectedIds("pendingInvitationTable"); // Replace with your table ID
+    if (selectedIds.length === 0) {
+        showToast("Warning", "No invitations selected for deletion.", "warning");
+        return;
+    }
+
+    confirmAction("Are you sure you want to delete selected invitations? Only expired or cancelled invitations will be deleted.", async () => {
+        showLoading(true, "Deleting selected invitations...");
+        try {
+            const response = await fetchWithCsrf(`${API_BASE}/api/admin/invitations/bulk-delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: selectedIds })
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || `HTTP error! status: ${response.status}`);
+            }
+
+            await loadInvitations();
+            renderPendingInvitationTable();
+            updateDashboardCounts();
+
+            let message = `${data.deleted.length} invitation(s) deleted.`;
+            if (data.skipped && data.skipped.length > 0) {
+                message += ` ${data.skipped.length} skipped.`;
+                console.warn("Skipped:", data.skipped);
+            }
+
+            showToast("Success", message, "success");
+
+        } catch (error) {
+            console.error("Error during bulk delete:", error);
+            showToast("Error", `Failed to delete invitations: ${error.message}`, "danger");
+        } finally {
+            showLoading(false);
+        }
+    });
+  }
+
+
+  //=================EVENTS======================// 
+
+    // --- Events ---
+    async function editEvent(eventId) {
+
+        const numericeventId = parseInt(eventId, 10); 
+
+        const event = events.find(e => e.id === numericeventId);
+        if (!event) {
+            showToast("Error", "Event not found.", "danger");
+            return;
+        }
+        createEditEventModal(event);
+    }
+
+
+    async function deleteEvent(eventId) {
+        confirmAction("Are you sure you want to delete this event? This action cannot be undone.", async () => {
+            showLoading(true, "Deleting event...");
+            try {
+                // Use fetchWithCsrf
+                const response = await fetchWithCsrf(`${API_BASE}/api/admin/events/${eventId}/delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ event_id: eventId })
+                 });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+                await loadEvents();
+                updateDashboardCounts();
+                renderEventsTable();
+                showToast("Success", "Event deleted successfully.", "success");
+            } catch (error) {
+                console.error("Error deleting event:", error);
+                showToast("Error", `Failed to delete event: ${error.message}`, "danger");
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+    // --- Events Bulk Actions ---
+function bulkToggleEventStatus(isActive) {
+    const selectedIds = getSelectedIds('eventsTable');
+    if (selectedIds.length === 0) {
+        showToast("Warning", "No events selected.", "warning");
+        return;
+    }
+
+    const action = isActive ? "activate" : "deactivate";
+    const actionVerb = isActive ? "Activating" : "Deactivating";
+
+    confirmAction(`Are you sure you want to ${action} the selected events?`, async () => {
+        showLoading(true, `${actionVerb} selected events...`);
+        try {
+            const response = await fetchWithCsrf(`${API_BASE}/api/admin/events/bulk-action`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ event_ids: selectedIds, action })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || `HTTP error! status: ${response.status}`);
+            }
+
+            await loadEvents();
+            renderEventsTable();
+            updateDashboardCounts();
+
+            let message = `${actionVerb} completed.`;
+            if (data.updated && data.updated.length > 0) {
+                message += ` ${data.updated.length} event(s) updated.`;
+            }
+            if (data.skipped && data.skipped.length > 0) {
+                message += ` ${data.skipped.length} skipped.`;
+                console.warn("Skipped:", data.skipped);
+            }
+
+            showToast("Success", message, "success");
+
+        } catch (error) {
+            console.error(`Error bulk ${actionVerb} events:`, error);
+            showToast("Error", `Failed to ${action} selected events. ${error.message}`, "danger");
+        } finally {
+            showLoading(false);
+        }
+    });
+}
+
+
+    function bulkDeleteEvents(action) {
+        const selectedIds = getSelectedIds('eventsTable');
+        if (selectedIds.length === 0) {
+            showToast("Warning", "No events selected.", "warning");
+            return;
+        }
+        confirmAction("Are you sure you want to delete the selected events? This action cannot be undone.", async () => {
+            showLoading(true, "Deleting selected events...");
+        
+            try {
+
+                // Use fetchWithCsrf
+                const response = await fetchWithCsrf(`${API_BASE}/api/admin/events/bulk-action`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                     
+                    body: JSON.stringify({ event_ids: selectedIds, action:'delete' })
+                });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                await loadEvents();
+                renderEventsTable();
+                updateDashboardCounts();
+                showToast("Success", "Selected events deleted successfully.", "success");
+            } catch (error) {
+                console.error("Error bulk deleting events:", error);
+                showToast("Error", "Failed to delete selected events.", "danger");
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+
+    function EventsToggle(eventId, isActive) {
+        const actionText = isActive ? "activate" : "deactivate";
+        const actionVerb = isActive ? "activating" : "deactivating";
+ 
+        confirmAction(`Are you sure you want to ${actionText} this location?`, async () => {
+            showLoading(true, ` ${actionVerb} Event...`);
+            
+        try {
+                // Use fetchWithCsrf
+                const response = await fetchWithCsrf(`${API_BASE}/api/admin/events/${eventId}/toggle-status`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                     
+                    body: JSON.stringify({ event_id: eventId, is_active: isActive })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+                await loadEvents();
+                renderEventsTable();
+                updateDashboardCounts();
+                showToast("Success", `Event ${actionText}d successfully.`, "success");
+            } catch (error) {
+                console.error(`Error ${actionVerb} Event:`, error);
+                showToast("Error", `Failed to ${actionText} Event: ${error.message}`, "danger");
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+
+    // === Add New Item Functions (Opening Modals) ===
+    function addNewLocation() {
+        createLocationModal();
+    }
+
+    function inviteNewAdmin() {
+        createAdminModal();
+    }
+
+    function sendNewpendingInvitation() {
+        creatependingInvitationModal();
+    }
+
+    function addNewManagedInvitee() {
+        createManagedInviteeModal();
+    }
+
+    function addNewEvent() {
+        createEventModal();
+    }
+
+    // === Helper Functions ===
+
+    function showLoading(show, message = "Loading...") {
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        if (!loadingOverlay) {
+            const overlay = document.createElement('div');
+            overlay.id = 'loadingOverlay';
+            overlay.style = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.7);
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                color: white;
+                font-size: 1.2em;
+                z-index: 1060; /* Higher than Bootstrap modals */
+            `;
+            overlay.innerHTML = `
+                <div class="spinner-border text-light" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3" id="loadingMessage">${message}</p>
+            `;
+            document.body.appendChild(overlay);
+        } else {
+            document.getElementById('loadingMessage').textContent = message;
+            loadingOverlay.style.display = show ? 'flex' : 'none';
+        }
+    }
+
+    function hideLoading() {
+        showLoading(false);
+    }
+
+    function showToast(header, body, type = "info") {
+        const toastEl = document.getElementById('liveToast');
+        const toastHeader = document.getElementById('toastHeader');
+        const toastBody = document.getElementById('toastBody');
+
+        toastHeader.textContent = header;
+        toastBody.textContent = body;
+
+        toastEl.classList.remove('text-bg-success', 'text-bg-danger', 'text-bg-warning', 'text-bg-info');
+        if (type === "success") toastEl.classList.add('text-bg-success');
+        else if (type === "danger") toastEl.classList.add('text-bg-danger');
+        else if (type === "warning") toastEl.classList.add('text-bg-warning');
+        else toastEl.classList.add('text-bg-info');
+
+        const toast = new bootstrap.Toast(toastEl, { delay: 5000 });
+        toast.show();
+    }
+
+    function formatDate(dateString) {
+        if (!dateString) return 'N/A';
+        const options = { year: 'numeric', month: 'short', day: 'numeric' };
+        return new Date(dateString).toLocaleDateString(undefined, options);
+    }
+
+    function formatDateTime(dateString) {
+        if (!dateString) return 'N/A';
+        const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+        return new Date(dateString).toLocaleDateString(undefined, options);
+    }
+
+    function capitalizeFirstLetter(string) {
+        if (!string) return '';
+        return string.charAt(0).toUpperCase() + string.slice(1).replace(/_/g, ' ');
+    }
+
+    function populateOrganizationFilters() {
+        const orgFilters = document.querySelectorAll('#locationOrgFilter, #adminOrgFilter, #pendingInvitationOrgFilter, #managedInviteeOrgFilter, #eventOrgFilter');
+        orgFilters.forEach(select => {
+            const currentSelected = select.value;
+            select.innerHTML = '<option value="">All Organizations</option>';
+            organizations.forEach(org => {
+                const option = document.createElement('option');
+                option.value = org.id;
+                option.textContent = org.name;
+                select.appendChild(option);
+            });
+            select.value = currentSelected; // Re-select the previously chosen option
+        });
+    }
+
+    function populateLocationFilters() {
+        const locationFilter = document.getElementById('eventLocationFilter');
+        const currentSelected = locationFilter.value;
+        locationFilter.innerHTML = '<option value="">All Locations</option>';
+        locations.forEach(loc => {
+            const option = document.createElement('option');
+            option.value = loc.id;
+            option.textContent = loc.name;
+            locationFilter.appendChild(option);
+        });
+        locationFilter.value = currentSelected;
+    }
+
+    // --- Modals for Add/Edit ---
+    function showModal(modalContent, modalId) {
+        const modalsContainer = document.getElementById('modalsContainer');
+        modalsContainer.innerHTML = modalContent;
+        const modalElement = document.getElementById(modalId);
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
+
+        modalElement.addEventListener('hidden.bs.modal', function () {
+            modalsContainer.innerHTML = ''; // Clean up modal from DOM
+        });
+        return modal;
+    }
+
+    async function handleSubmit(event, apiEndpoint, successMessage, modalInstance, isEdit = false) {
+        event.preventDefault();
+        showLoading(true, isEdit ? "Updating..." : "Adding...");
+        const formData = new FormData(event.target);
+        const data = Object.fromEntries(formData.entries());
+
+        
+        // Handle specific conversions for data types if needed (e.g., boolean for is_active)
+        if (data.is_active !== undefined) {
+            data.is_active = data.is_active === 'true';
+        }
+
+
+        // For dates/times, ensure they are in a format your backend expects
+    // Modify these lines to remove milliseconds and 'Z' for broader compatibility
+        if (data.start_time) {
+            // Example: '2025-06-11T22:55:00.000Z' becomes '2025-06-11T22:55:00'
+            data.start_time = new Date(data.start_time).toISOString().split('.')[0]; 
+        }
+        if (data.end_time) {
+            data.end_time = new Date(data.end_time).toISOString().split('.')[0];
+        }
+        if (data.expires_at) {
+            data.expires_at = new Date(data.expires_at).toISOString().split('.')[0];
+        }
+        
+            
+        try {
+            const method = isEdit ? 'PUT' : 'POST';
+            const response = await fetchWithCsrf(`${API_BASE}${apiEndpoint}`, {
+                method: method,
+                          
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to perform action.');
+            }
+
+            modalInstance.hide();
+            await loadAllData(); // Reload all data to ensure dashboard is up-to-date
+            showToast("Success", successMessage, "success");
+        } catch (error) {
+            console.error("Submission error:", error);
+            showToast("Error", `Operation failed: ${error.message}`, "danger");
+        } finally {
+            showLoading(false);
+        }
+    }
+
+
+    // Location Modals
+    function createLocationModal() {
+        const modalContent = `
+            <div class="modal fade" id="addLocationModal" tabindex="-1" aria-labelledby="addLocationModalLabel" aria-hidden="true">
+
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="addLocationModalLabel">Add New Location</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form id="addLocationForm">
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label for="locationName" class="form-label">Location Name</label>
+                                    <input type="text" class="form-control" id="locationName" name="name" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="locationOrganization" class="form-label">Organization</label>
+                                    <select class="form-select" id="locationOrganization" name="organization_id" required>
+                                        <option value="">Select Organization</option>
+                                        ${organizations.map(org => `<option value="${org.id}">${org.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="locationAddress" class="form-label">Address</label>
+                                    <input type="text" class="form-control" id="locationAddress" name="address" required>
+                                </div>
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="locationIsActive" name="is_active" value="true" checked>
+                                    <label class="form-check-label" for="locationIsActive">Active</label>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                <button type="submit" class="btn btn-custom">Add Location</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        `;
+        const modal = showModal(modalContent, 'addLocationModal');
+        document.getElementById('addLocationForm').addEventListener('submit', (e) => handleSubmit(e, '/api/admin/locations', 'Location added successfully!', modal));
+    }
+
+    function createEditLocationModal(location) {
+        const modalContent = `
+            <div class="modal fade" id="editLocationModal" tabindex="-1" aria-labelledby="editLocationModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="editLocationModalLabel">Edit Location</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form id="editLocationForm">
+                            <div class="modal-body">
+                                <input type="hidden" name="id" value="${location.id}">
+                                <div class="mb-3">
+                                    <label for="editLocationName" class="form-label">Location Name</label>
+                                    <input type="text" class="form-control" id="editLocationName" name="name" value="${location.name}" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="editLocationOrganization" class="form-label">Organization</label>
+                                    <select class="form-select" id="editLocationOrganization" name="organization_id" required>
+                                        <option value="">Select Organization</option>
+                                        ${organizations.map(org => `<option value="${org.id}" ${location.organization_id === org.id ? 'selected' : ''}>${org.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="editLocationAddress" class="form-label">Address</label>
+                                    <input type="text" class="form-control" id="editLocationAddress" name="address" value="${location.address}" required>
+                                </div>
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="editLocationIsActive" name="is_active" value="true" ${location.is_active ? 'checked' : ''}>
+                                    <label class="form-check-label" for="editLocationIsActive">Active</label>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                <button type="submit" class="btn btn-custom">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        `;
+        const modal = showModal(modalContent, 'editLocationModal');
+        document.getElementById('editLocationForm').addEventListener('submit', (e) => handleSubmit(e, `/api/admin/locations/${location.id}`, 'Location updated successfully!', modal, true));
+    }
+
+    // Admin Modals
+    function createAdminModal() {
+        const modalContent = `
+            <div class="modal fade" id="addAdminModal" tabindex="-1" aria-labelledby="addAdminModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="addAdminModalLabel">Invite New Administrator</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form id="addAdminForm">
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label for="adminEmail" class="form-label">Email Address</label>
+                                    <input type="email" class="form-control" id="adminEmail" name="email" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="adminOrganization" class="form-label">Organization</label>
+                                    <select class="form-select" id="adminOrganization" name="organization_id" required>
+                                        <option value="">Select Organization</option>
+                                        ${organizations.map(org => `<option value="${org.id}">${org.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="adminRole" class="form-label">Role</label>
+                                     <select class="form-select" id="adminRole" name="role" required>
+                                        <option value="org_admin">Organization Admin</option>
+                                        <option value="location_admin">Location Admin</option> 
+                                        <option value="super_admin">Super Admin</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                <button type="submit" class="btn btn-custom">Send Invite</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        `;
+        const modal = showModal(modalContent, 'addAdminModal');
+        document.getElementById('addAdminForm').addEventListener('submit', (e) => handleSubmit(e, '/api/admin/administrators', 'Administrator invitation sent successfully!', modal));
+    }
+
+    function createEditAdminModal(admin) {
+        const modalContent = `
+            <div class="modal fade" id="editAdminModal" tabindex="-1" aria-labelledby="editAdminModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="editAdminModalLabel">Edit Administrator</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form id="editAdminForm">
+                            <input type="hidden" name="id" value="${admin.id}">
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label for="editAdminFullName" class="form-label">Full Name</label>
+                                    <input type="text" class="form-control" id="editAdminFullName" name="name" value="${admin.name || ''}">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="editAdminEmail" class="form-label">Email Address</label>
+                                    <input type="email" class="form-control" id="editAdminEmail" name="email" value="${admin.email}" readonly>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="editAdminOrganization" class="form-label">Organization</label>
+                                    <select class="form-select" id="editAdminOrganization" name="organization_id" required>
+                                        <option value="">Select Organization</option>
+                                        ${organizations.map(org => `<option value="${org.id}" ${admin.organization_id === org.id ? 'selected' : ''}>${org.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="editAdminRole" class="form-label">Role</label>
+                                    <select class="form-select" id="editAdminRole" name="role" required>
+                                        <option value="org_admin" ${admin.role === 'org_admin' ? 'selected' : ''}>Organization Admin</option>
+                                        <option value="super_admin" ${admin.role === 'super_admin' ? 'selected' : ''}>Super Admin</option>
+                                        <option value="location_admin" ${admin.role === 'location_admin' ? 'selected' : ''}>Location Admin</option>
+                                    </select>
+                                </div>
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="editAdminIsActive" name="is_active" value="true" ${admin.is_active ? 'checked' : ''}>
+                                    <label class="form-check-label" for="editAdminIsActive">Active</label>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                <button type="submit" class="btn btn-custom">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        `;
+        const modal = showModal(modalContent, 'editAdminModal');
+        document.getElementById('editAdminForm').addEventListener('submit', (e) => handleSubmit(e, `/api/admin/administrators/${admin.id}`, 'Administrator updated successfully!', modal, true));
+    }
+
+    // pendingInvitation Modals (for general users/invitees)
+    function creatependingInvitationModal() {
+        const modalContent = `
+            <div class="modal fade" id="sendpendingInvitationModal" tabindex="-1" aria-labelledby="sendpendingInvitationModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="sendpendingInvitationModalLabel">Send New Invitation</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form id="sendpendingInvitationForm">
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label for="pendingInvitationEmail" class="form-label">Email Address</label>
+                                    <input type="email" class="form-control" id="pendingInvitationEmail" name="email" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="pendingInvitationOrg" class="form-label">Organization</label>
+                                    <select class="form-select" id="pendingInvitationOrg" name="organization_id" required>
+                                        <option value="">Select Organization</option>
+                                        ${organizations.map(org => `<option value="${org.id}">${org.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="pendingInvitationRole" class="form-label">Role</label>
+                                    <select class="form-select" id="pendingInvitationRole" name="role" required>
+                                        <option value="attendee">Attendee</option>
+                                        <option value="volunteer">Volunteer</option>
+                                        <option value="guest_minister">Guest Minister</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="inviteeExpires" class="form-label">Expires At (Optional)</label>
+                                    <input type="datetime-local" class="form-control" id="inviteeExpires" name="expires_at">
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                <button type="submit" class="btn btn-custom">Send Invite</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        `;
+        const modal = showModal(modalContent, 'sendpendingInvitationModal');
+        document.getElementById('sendpendingInvitationForm').addEventListener('submit', (e) => handleSubmit(e, '/api/admin/invitations', 'Invitation sent successfully!', modal));
+    }
+
+    
+    // Managed Invitee Modals (formerly Guests)
+    function createManagedInviteeModal() {
+        const modalContent = `
+            <div class="modal fade" id="addManagedInviteeModal" tabindex="-1" aria-labelledby="addManagedInviteeModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="addManagedInviteeModalLabel">Add New Invitee</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form id="addManagedInviteeForm">
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label for="managedInviteeFullName" class="form-label">Full Name</label>
+                                    <input type="text" class="form-control" id="managedInviteeFullName" name="name" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="managedInviteeEmail" class="form-label">Email (Optional)</label>
+                                    <input type="email" class="form-control" id="managedInviteeEmail" name="email">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="managedInviteePhone" class="form-label">Phone Number (Optional)</label>
+                                    <input type="tel" class="form-control" id="managedInviteePhone" name="phone_number">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="managedInviteeOrg" class="form-label">Organization</label>
+                                    <select class="form-select" id="managedInviteeOrg" name="organization_id" required>
+                                        <option value="">Select Organization</option>
+                                        ${organizations.map(org => `<option value="${org.id}">${org.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="managedInviteePosition" class="form-label">Position</label>
+                                    <select class="form-select" id="managedInviteePosition" name="position" required>
+                                        <option value="Attendee">Attendee</option>
+                                        <option value="Volunteer">Volunteer</option>
+                                        <option value="Guest">Guest Minister</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="managedInviteeStatus" class="form-label">Status</label>
+                                    <select class="form-select" id="managedInviteeStatus" name="status" required>
+                                        <option value="Present">Present</option>
+                                        <option value="Absent">Absent</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                <button type="submit" class="btn btn-custom">Add Invitee</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        `;
+        const modal = showModal(modalContent, 'addManagedInviteeModal');
+        document.getElementById('addManagedInviteeForm').addEventListener('submit', (e) => handleSubmit(e, '/api/admin/managed_invitees', 'Invitee added successfully!', modal));
+    }
+
+    function createEditManagedInviteeModal(invitee) {
+        const modalContent = `
+            <div class="modal fade" id="editManagedInviteeModal" tabindex="-1" aria-labelledby="editManagedInviteeModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="editManagedInviteeModalLabel">Edit Invitee: </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form id="editManagedInviteeForm">
+                            <input type="hidden" name="id" value="${invitee.id}">
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label for="editManagedInviteeFullName" class="form-label">Full Name</label>
+                                    <input type="text" class="form-control" id="editManagedInviteeFullName" name="name" value="${invitee.name || ''}" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="editManagedInviteeEmail" class="form-label">Email (Optional)</label>
+                                    <input type="email" class="form-control" id="editManagedInviteeEmail" name="email" value="${invitee.email || ''}">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="editManagedInviteePhone" class="form-label">Phone Number (Optional)</label>
+                                    <input type="tel" class="form-control" id="editManagedInviteePhone" name="phone_number" value="${invitee.phone_number || ''}">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="editManagedInviteeOrg" class="form-label">Organization</label>
+                                    <select class="form-select" id="editManagedInviteeOrg" name="organization_id" required>
+                                        <option value="">Select Organization</option>
+                                        ${organizations.map(org => `<option value="${org.id}" ${invitee.organization.name === org.name ? 'selected' : ''}> ${org.name} </option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="editManagedInviteePosition" class="form-label">Position</label>
+                                    <select class="form-select" id="editManagedInviteePosition" name="position" required>
+                                        <option value="Attendee" ${invitee.position === 'Attendee' ? 'selected' : ''}>Attendee</option>
+                                        <option value="Volunteer" ${invitee.position === 'Volunteer' ? 'selected' : ''}>Volunteer</option>
+                                        <option value="Guest" ${invitee.position === 'Guest' ? 'selected' : ''}>Guest Minister</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="editManagedInviteeStatus" class="form-label">Status</label>
+                                    <select class="form-select" id="editManagedInviteeStatus" name="confirmed" required>
+                                        <option value="Present" ${invitee.confirmed === 'Present' ? 'selected' : ''}>Present</option>
+                                        <option value="Absent" ${invitee.confirmed === 'Absent' ? 'selected' : ''}>Absent</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                <button type="submit" class="btn btn-custom">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        `;
+        const modal = showModal(modalContent, 'editManagedInviteeModal');
+        document.getElementById('editManagedInviteeForm').addEventListener('submit', (e) => handleSubmit(e, `/api/admin/managed_invitees/${invitee.id}`, 'Invitee updated successfully!', modal, true));
+    }
+
+
+    // Event Modals
+    function createEventModal() {
+        const modalContent = `
+            <div class="modal fade" id="addEventModal" tabindex="-1" aria-labelledby="addEventModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="addEventModalLabel">Add New Event</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form id="addEventForm">
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label for="eventName" class="form-label">Event Name</label>
+                                    <input type="text" class="form-control" id="eventName" name="name" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="eventOrganization" class="form-label">Organization</label>
+                                    <select class="form-select" id="eventOrganization" name="organization_id" required>
+                                        <option value="">Select Organization</option>
+                                        ${organizations.map(org => `<option value="${org.id}">${org.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="eventLocation" class="form-label">Location</label>
+                                    <select class="form-select" id="eventLocation" name="location_id" required>
+                                        <option value="">Select Location</option>
+                                        ${locations.map(loc => `<option value="${loc.id}">${loc.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="eventStartTime" class="form-label">Start Time</label>
+                                    <input type="datetime-local" class="form-control" id="eventStartTime" name="start_time" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="eventEndTime" class="form-label">End Time</label>
+                                    <input type="datetime-local" class="form-control" id="eventEndTime" name="end_time" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="eventDescription" class="form-label">Description (Optional)</label>
+                                    <textarea class="form-control" id="eventDescription" name="description" rows="3"></textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                <button type="submit" class="btn btn-custom">Add Event</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        `;
+        const modal = showModal(modalContent, 'addEventModal');
+        document.getElementById('addEventForm').addEventListener('submit', (e) => handleSubmit(e, '/api/admin/events', 'Event added successfully!', modal));
+    }
+
+
+    function createEditEventModal(event) {
+        // Format datetime-local input values
+        const formatDateTimeLocal = (dateString) => {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            const year = date.getFullYear();
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const day = date.getDate().toString().padStart(2, '0');
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            return `${year}-${month}-${day}T${hours}:${minutes}`;
+        };
+
+        const modalContent = `
+            <div class="modal fade" id="editEventModal" tabindex="-1" aria-labelledby="editEventModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="editEventModalLabel">Edit Event</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form id="editEventForm">
+                            <input type="hidden" name="id" value="${event.id}">
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label for="editEventName" class="form-label">Event Name</label>
+                                    <input type="text" class="form-control" id="editEventName" name="name" value="${event.name}" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="editEventOrganization" class="form-label">Organization</label>
+                                    <select class="form-select" id="editEventOrganization" name="organization_id" required>
+                                        <option value="">Select Organization</option>
+                                        ${organizations.map(org => `<option value="${org.id}" ${event.organization_id === org.id ? 'selected' : ''}>${org.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="editEventLocation" class="form-label">Location</label>
+                                    <select class="form-select" id="editEventLocation" name="location_id" required>
+                                        <option value="">Select Location</option>
+                                        ${locations.map(loc => `<option value="${loc.id}" ${event.location_id === loc.id ? 'selected' : ''}>${loc.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="editEventStartTime" class="form-label">Start Time</label>
+                                    <input type="datetime-local" class="form-control" id="editEventStartTime" name="start_time" value="${formatDateTimeLocal(event.start_time)}" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="editEventEndTime" class="form-label">End Time</label>
+                                    <input type="datetime-local" class="form-control" id="editEventEndTime" name="end_time" value="${formatDateTimeLocal(event.end_time)}" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="editEventDescription" class="form-label">Description (Optional)</label>
+                                    <textarea class="form-control" id="editEventDescription" name="description" rows="3">${event.description || ''}</textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                <button type="submit" class="btn btn-custom">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        `;
+        const modal = showModal(modalContent, 'editEventModal');
+        document.getElementById('editEventForm').addEventListener('submit', (e) => handleSubmit(e, `/api/admin/events/${event.id}`, 'Event updated successfully!', modal, true));
+    }
+
+</script>
+
+</script>
+
+
+{% endblock %}

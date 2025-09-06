@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Register Admin{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white text-center py-3">
+
+                    {% if org.logo_url %}
+                    <img src="{{ url_for('static', filename='images/' + org.logo_url) }}" alt="Logo"
+                        style="max-width: 70px;" class="mb-2">
+                    {% else %}
+                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="DanwebIT Logo"
+                        style="max-width: 70px;" class="mb-2">
+                    {% endif %}
+
+                    <h4 class="mt-2">Register Admin</h4>
+
+                </div>
+                <div class="card-body px-4 py-4">
+
+                    <div class="card-body p-4">
+
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                        {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                        {% endfor %}
+                        {% endif %}
+                        {% endwith %}
+
+                        <form method="POST" action="{{ url_for('inv.register_admin', org_uuid=org.uuid) }}"
+                            class="form-horizontal">
+                            {{ form.hidden_tag() }}
+
+                            <div class="form-floating mb-3">
+                                {{ form.name(class="form-control", placeholder=form.name.label.text) }}
+                                <label for="name">{{ form.name.label }}</label>
+                                {% if form.name.errors %}
+                                <div class="invalid-feedback d-block"> {# Use d-block to force display #}
+                                    {% for error in form.name.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <div class="form-floating mb-3">
+                                {{ form.email(class="form-control", placeholder=form.email.label.text) }}
+                                <label for="email">{{ form.email.label }}</label>
+                                {% if form.email.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.email.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <div class="form-floating mb-3">
+                                {# Using form.gender directly handles the select field if defined in WTForms #}
+                                {{ form.gender(class="form-select", placeholder=form.gender.label.text, aria_label="Gender") }}
+                                <label for="gender">{{ form.gender.label }}</label>
+                                {% if form.gender.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.gender.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
+
+                            <div class="form-floating mb-3">
+                                {{ form.phone_number(class="form-control", placeholder=form.phone_number.label.text) }}
+                                <label for="phone_number">{{ form.phone_number.label }}</label>
+                                {% if form.phone_number.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.phone_number.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+
+
+                            <div class="form-floating mb-3">
+                                {{ form.address(class="form-control", placeholder=form.address.label.text) }}
+                                <label for="address">{{ form.address.label }}</label>
+                                {% if form.address.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.address.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
+
+                            <div class="form-floating mb-3">
+                                {# Using form.role directly handles the select field if defined in WTForms #}
+                                {{ form.role(class="form-select", placeholder=form.role.label.text, aria_label="Role") }}
+                                <label for="role">{{ form.role.label }}</label>
+                                {% if form.role.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.role.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            {# --- ADDED PASSWORD FIELDS HERE --- #}
+                            <div class="form-floating mb-3">
+                                {{ form.password(class="form-control", placeholder=form.password.label.text) }}
+                                <label for="password">{{ form.password.label }}</label>
+                                {% if form.password.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.password.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <div class="form-floating mb-3">
+                                {{ form.confirm_password(class="form-control", placeholder=form.confirm_password.label.text) }}
+                                <label for="confirm_password">{{ form.confirm_password.label }}</label>
+                                {% if form.confirm_password.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.confirm_password.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                            {# -------------------------------- #}
+
+                            <button type="submit" class="btn btn-success w-100 mt-3">Register Admin</button>
+                            {# If you have a submit field defined in your form, use this instead: #}
+                            {# {{ form.submit(class="btn btn-success w-100 mt-3") }} #}
+                        </form>
+                    </div>
+                    <div class="card-footer text-center py-2">
+                        <small>Powered by <a href="https://x.com/danwebit" target="_blank"
+                                rel="noopener noreferrer">DanwebIT</a></small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
