@@ -121,10 +121,10 @@
     {% endwith %}
 
     <p class="message {{ status }}">{{ message }}</p>
-
+      {{event.name }}
     <img src="data:image/png;base64,{{ qr_code_path }}" alt="QR Code" />
     <br />
-    <a href="{{ url_for('inv.register',org_uuid=org.uuid, invitee_id=invitee.id) }}">Register Another Invitee</a>
+    <a href="{{ url_for('inv.register',org_uuid=org.uuid) }}">Register</a>
   </div>
 </body>
 </html>

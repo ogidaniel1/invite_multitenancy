@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #f8f9fa; padding: 20px; }
+    .container { background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 3px 8px rgba(0,0,0,0.1); }
+    h2 { color: #2c3e50; }
+    p { line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>🎉 Registration Confirmed!</h2>
+    <p>Dear {{ invitee.name }},</p>
+    <p>Your attendance for <strong>{{ event.name }}</strong> has been successfully confirmed.</p>
+    <p>Event Date: <strong>{{ event.start_time.strftime("%Y-%m-%d %H:%M") }}</strong></p>
+    <p>Location: {{ event.location.name if event.location else "To be announced" }}</p>
+    <p>We look forward to seeing you!</p>
+    <br>
+    <p>Thank you,<br><strong>{{ org.name }} Team</strong></p>
+  </div>
+</body>
+</html>

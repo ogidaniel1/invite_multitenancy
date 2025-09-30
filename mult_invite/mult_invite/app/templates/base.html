@@ -321,12 +321,14 @@
 
                     {% if current_user.is_authenticated %}
                     <li class="nav-item">
+                       {% if current_user.is_super_admin or current_user.is_org_admin %}
+                        
                         <a class="nav-link {% if request.path == url_for('inv.show_invitees',org_uuid=org.uuid) %}active{% endif %}"
                             href="{{ url_for('inv.show_invitees',org_uuid=org.uuid) }}">
                             <i class="bi bi-speedometer2"></i> Dashboard
                         </a>
                     </li>
-
+                        {% endif %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="membersDropdown" role="button"
                             data-bs-toggle="dropdown" aria-expanded="false">
@@ -338,38 +340,66 @@
                                     <i class="bi bi-person-plus"></i> Register Member
                                 </a>
                             </li>
+
                             {% if current_user.is_super %}  
                                      <li>
                                          <a class="dropdown-item" href="{{ url_for('inv.all_org') }}">
                                     <i class="bi bi-person-circle"></i> Organizations
                                 </a>
                                      </li>
-                                   
+                            {% endif %}
+                            
+                            {% if current_user.is_super_admin or current_user.is_org_admin  %}
+                            
                              <li>
                                 <a class="dropdown-item" href="{{ url_for('inv.register_admin',org_uuid=org.uuid) }}">
                                     <i class="bi bi-person-plus"></i> Register Admin
                                 </a>
                             </li>
+                                                         <li>
+                                <a class="dropdown-item" href="{{ url_for('inv.manage_locations',org_uuid=org.uuid) }}">
+                                    <i class="bi  bi-geo-alt-fill"></i> Add location
+                                </a>
+                            </li>
+                                                         <li>
+                                <a class="dropdown-item" href="{{ url_for('inv.add_event',org_uuid=org.uuid) }}">
+                                    <i class="bi bi-person-plus"></i> Add Event
+                                </a>
+                            </li>
                             {% endif %}
 
-                            <li>
-                                <a class="dropdown-item" href="{{ url_for('inv.show_invitees',org_uuid=org.uuid) }}">
-                                    <i class="bi bi-person-lines-fill"></i> View Members
-                                </a>
                             </li>
                         </ul>
                     </li>
+                {% if event is defined  %}
+
+                     <li class="nav-item">
+                        <a class="nav-link {% if request.path == url_for('inv.show_event_invitees',org_uuid=org.uuid,event_id=event.id) %}active{% endif %}"
+                            href="{{ url_for('inv.show_event_invitees',org_uuid=org.uuid,event_id=event.id) }}">
+                            <i class="bi bi-box-arrow-right"></i> Ongoing Events
+                        </a>
+                    </li>
+                
 
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path == url_for('inv.confirm_attendance',org_uuid=org.uuid) %}active{% endif %}"
-                            href="{{ url_for('inv.confirm_attendance',org_uuid=org.uuid) }}">
+                        <a class="nav-link {% if request.path == url_for('inv.confirm_attendance',org_uuid=org.uuid,event_id=event.id) %}active{% endif %}"
+                            href="{{ url_for('inv.confirm_attendance',org_uuid=org.uuid,event_id=event.id) }}">
                             <i class="bi bi-calendar-check"></i> Attendance
                         </a>
                     </li>
 
+                {% else %}
+                
+                <span class="nav-link disabled">
+               <i class="bi bi-calendar-check"></i> Attendance
+                </span>
+                {% endif %}
+                 {% endif %}
+                
+                {%if current_user.is_super_admin %}
                     <li class="nav-item">
                         <a class="nav-link {% if request.path == url_for('inv.feedback_chart',org_uuid=org.uuid) %}active{% endif %}"
-                            href="{{ url_for('inv.feedback_chart',org_uuid=org.uuid) }}">
+                            href="{{ url_for('inv.action_logs',org_uuid=org.uuid) }}">
                             <i class="bi bi-graph-up"></i> Reports
                         </a>
                     </li>
@@ -386,9 +416,20 @@
                         <ul class="dropdown-menu dropdown-menu-end shadow-sm" aria-labelledby="userDropdown">
                             
                             <li>
-                                <a class="dropdown-item" href="{{ url_for('inv.show_invitees', org_uuid=org.uuid) }}">
+                                <a class="dropdown-item" href="{{ url_for('inv.view_admin', org_uuid=org.uuid) }}">
                                     <i class="bi bi-person"></i> Profile
                                 </a>
+
+                                  <a class="dropdown-item" href="{{ url_for('inv.show_event_invitees',org_uuid=org.uuid) }}">
+                                    <i class="bi bi-person"></i> Events Dashboard
+                                </a>
+
+                                {%if current_user.is_super_admin %}
+                                  <a class="dropdown-item" href="{{ url_for('admin.management_dashboard',org_uuid=org.uuid) }}">
+                                    <i class="bi bi-person"></i> Management dashboard
+                                </a>
+
+                                {% endif %}
                             </li>
                             {% if current_user.is_admin %}
                             <li>
@@ -426,12 +467,11 @@
             <a href="{{ url_for('inv.show_invitees',org_uuid=org.uuid) }}" class="btn btn-sm btn-outline-primary">
                 <i class="bi bi-person-lines-fill"></i> Members
             </a>
-            <a href="{{ url_for('inv.confirm_attendance',org_uuid=org.uuid) }}" class="btn btn-sm btn-outline-primary">
-                <i class="bi bi-calendar-check"></i> Attendance
-            </a>
+          
             <a href="{{ url_for('inv.show_invitees',org_uuid=org.uuid) }}" class="btn btn-sm btn-outline-primary">
                 <i class="bi bi-person"></i> Profile
             </a>
+          
             <a href="{{ url_for('inv.logout',org_uuid=org.uuid) }}" class="btn btn-sm btn-outline-danger">
                 <i class="bi bi-box-arrow-right"></i> Logout
             </a>

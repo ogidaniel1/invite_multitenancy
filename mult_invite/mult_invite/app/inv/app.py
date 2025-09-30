@@ -47,7 +47,7 @@ from itertools import zip_longest
 from geopy.distance import geodesic
 import re 
 from io import BytesIO
-from config import Config
+from config import Config,get_serializer
 # ,org_admin_required,super_required
 import uuid
 from sqlalchemy.dialects.postgresql import UUID
@@ -56,13 +56,14 @@ from flask_cors import CORS # For handling CORS if frontend is on a different or
 from datetime import datetime
 from app import db
 from app.models import LoginForm,ActionLog,DeleteInviteeForm,DeleteLog,OrganizationForm,Location,OrgIdentifierForm
-from app.models import Organization,Admin,Invitation,Invitee,InviteeForm,super_required,SubmitField,Feedback,Event
-from app.models import FeedbackForm,AttendanceForm,AdminForm,admin_or_super_required,fetch_lgas_all,org_admin_or_super_required
-from config import Config
+from app.models import Organization,Admin,Invitation,Invitee,InviteeForm,super_required,SubmitField,Feedback,Event,EventInvitee
+from app.models import FeedbackForm,AttendanceForm,AdminForm,admin_or_super_required,fetch_lgas_all,org_admin_or_super_required,normalize_phone
+from config import Config,get_serializer
 from app import csrf,mail
 from flask import current_app
 
-from app.inv.tokens import generate_reset_token, verify_reset_token,send_password_reset_email
+
+from app.inv.tokens import generate_reset_token, verify_reset_token,send_password_reset_email,send_admin_login_link,send_confirm_email
 from app.models  import RequestResetForm, ResetPasswordForm # Create these forms below
 
  
@@ -80,9 +81,6 @@ load_dotenv()
 DEFAULT_ADMIN_EMAIL = os.getenv('DEFAULT_ADMIN_EMAIL')
 DEFAULT_ADMIN_PASSWORD = os.getenv('DEFAULT_ADMIN_PASSWORD')
 
-
-#deadline date
-registration_deadline = datetime(2024, 5, 26, 23, 59, 59)  # Example: May 26, 2025, 23:59:59
 
 
 
@@ -549,7 +547,7 @@ def super_login():
 
 
 @app_.route('/<uuid:org_uuid>/login', methods=['GET', 'POST']) 
-def login(org_uuid):
+def login(org_uuid,event_id=0):
     form = LoginForm()
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
 
@@ -572,7 +570,8 @@ def login(org_uuid):
                     # For now, keeping your existing redirect
                     return redirect(url_for('admin.management_dashboard', org_uuid=org.uuid))
                 else:
-                    return redirect(url_for('inv.show_invitees', org_uuid=org.uuid))
+                    events = Event.query.filter_by(organization_id=org.id)
+                    return redirect(url_for('inv.show_event_invitees',events=events, org_uuid=org.uuid))
             else:
                 flash('Unauthorized access to this organization.', 'danger')
         else:
@@ -587,6 +586,16 @@ def logout(org_uuid):
     logout_user()
     flash('You have been logged out!', 'success')
     return redirect(url_for('inv.login', org_uuid=org_uuid))
+
+
+
+@app_.route('/logout')
+@login_required
+def logout_super():
+    logout_user()
+    flash('You have been logged out!', 'success')
+    return redirect(url_for('inv.super_login'))
+
 
 
 ######################...helper...#########################
@@ -629,117 +638,179 @@ def log_action(action_type, user_id, record_type=None, record_id=None, associate
 ##################################################
 # ............delete function..................
 
-@app_.route('/<uuid:org_uuid>/del_invitee/<int:invitee_id>', methods=['POST','GET'])
+# Remove from event
+
+@app_.route('/<uuid:org_uuid>/del_event_invitee/<int:event_id>/<int:invitee_id>', methods=['GET','POST'])
 @org_admin_or_super_required
-def del_invitee(org_uuid,invitee_id):
+def del_event_invitee(org_uuid, event_id, invitee_id):
+    org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
 
-   """deleting an existing invitee"""
-   org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
-   
-   is_authorized = False
-    
-   if current_user.is_super_admin:
-        is_authorized = True
-   elif current_user.is_org_admin and current_user.organization_id == org.id:
-        is_authorized = True
-    
-   if not is_authorized:
-       flash('You do not have the required permissions to delete invitees.', 'danger')
-        # Redirect to a login page or a general unauthorized page
-       return redirect(url_for('inv.universal_login')) # Assuming 'universal_login' is your generic login/dashboard
+    # event & invitee must belong to org
+    event = Event.query.filter_by(id=event_id, organization_id=org.id).first_or_404()
+    invitee = Invitee.query.filter_by(id=invitee_id, organization_id=org.id).first_or_404()
+    link = EventInvitee.query.filter_by(event_id=event.id, invitee_id=invitee.id).first()
 
-   invitee = Invitee.query.filter_by(id=invitee_id, organization_id=org.id).first_or_404()
+    if not link:
+        return jsonify({'status': 'error', 'message': 'Invitee not registered'}), 404
 
-   try:
-        csrf_token = request.headers.get('X-CSRFToken')
-        validate_csrf(csrf_token)
 
-        # Extra security (not strictly necessary since already filtered above)
-        if invitee.organization_id != org.id:
-            return jsonify({'status': 'error', 'message': 'Unauthorized access'}), 403
+    if request.method == 'POST':
+        try:
+            csrf_token = request.headers.get('X-CSRFToken')
+            validate_csrf(csrf_token)
 
-        if current_user.is_super:
-            db.session.delete(invitee)
-            action = 'permanent_delete'
+            db.session.delete(link)
+            db.session.commit()
 
-        elif current_user.is_org_admin and current_user.organization_id == org.id:
-            invitee.deleted = True
-            invitee.deleted_at = datetime.utcnow()
-            invitee.deleted_by = current_user.id
-            action = 'soft_delete'
+            log_action(
+               'remove invitee from event',
+                user_id=current_user.id if current_user.is_authenticated else None,
+                record_type='invitee',
+                record_id=invitee.id,
+                associated_org_id=org.id
+            )
+            
+            return jsonify({'status': 'success','message': f"Invitee {invitee.name} removed from event {event.name}."}), 200
+
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'status': 'Error removing invitee', 'message': str(e)}), 400
+
         
-        else:
-            return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+# Delete completely
 
-        db.session.commit()
-        log_action(
-            'delete',
-            user_id=current_user.id if current_user.is_authenticated else None,
-            record_type='invitee',
-            record_id=invitee.id,
-            associated_org_id=org.id
-        )
-        return jsonify({'status': 'success','message': 'Invitee deleted successfully'}), 200
-   
-   except Exception as e:
-        db.session.rollback()
-        return jsonify({'status': 'error', 'message': str(e)}), 400
+@app_.route('/<uuid:org_uuid>/del_invitee/<int:invitee_id>', methods=['GET','POST'])
+@org_admin_or_super_required
+def del_invitee(org_uuid, invitee_id):
     
-
-##################################################
-# ............mark attendance function by Admins..................
-
-@app_.route('/<uuid:org_uuid>/mark_invitee/<int:invitee_id>', methods=['POST'])
-@admin_or_super_required
-def mark_invitee(org_uuid, invitee_id):
-    
-    """Admins confirm or mark invitees attendance """
+    current_app.logger.info(f"DELETE INVITEE HIT org={org_uuid}, invitee={invitee_id}, user ={current_user.id if current_user.is_authenticated else 'anon'}")
+     
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
     
     is_authorized = False
-    invitee = None # Initialize to None
+    
+    if current_user.is_super_admin:
+            is_authorized = True
+    elif current_user.is_org_admin and current_user.organization_id == org.id:
+            is_authorized = True
+        
+    if not is_authorized:
+        flash('You do not have the required permissions to delete invitees.', 'danger')
+            # Redirect to a login page or a general unauthorized page
+        return redirect(url_for('inv.universal_login')) # Assuming 'universal_login' is your generic login/dashboard
+
+
+    invitee = Invitee.query.filter_by(id=invitee_id, organization_id=org.id).first_or_404()
+    
+    if not invitee:
+        return jsonify({'status': 'error', 'message': 'Invitee or event not found'}), 404
+
+    if request.method == 'POST':
+        try:
+            csrf_token = request.headers.get('X-CSRFToken')
+            validate_csrf(csrf_token)
+
+            db.session.delete(invitee)  # cascades to EventInvitee
+            db.session.commit()
+            current_app.logger.info(f"Invitee{invitee.id} ({invitee.name}) deleted from DB permamnently.")
+
+
+            log_action(
+                'delete invitee',
+                user_id=current_user.id if current_user.is_authenticated else None,
+                record_type='invitee',
+                record_id=invitee.id,
+                associated_org_id=org.id
+            )
+
+            #permanently deleted.", "success")
+            return jsonify({'status': 'success','message': f"Invitee {invitee.name} permanently deleted."}), 200
+            
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"error deleting invitee{invitee_id}: {str(e)}")
+
+            return jsonify({'status': 'error', 'message': str(e)}), 400
+            
+            
+         
+##################################################
+# ............mark attendance function by Admins..................
+
+@app_.route('/<uuid:org_uuid>/mark_invitee/<int:event_id>/<int:invitee_id>', methods=['POST'])
+@admin_or_super_required
+def mark_invitee(org_uuid,event_id,invitee_id):
+    
+    """Admins confirm or mark invitees attendance for a specific event.
+    - Super Admin: can mark attendance for any invitee in any org.
+    - Org Admin: can mark for invitees within their own org.
+    - Location Admin: can only mark if they are assigned to the same location as the event.
+    """
+    org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+    event=Event.query.filter_by(id=event_id, organization_id=org.id).first_or_404()
+
+
+    # --- Role based access ---
+    is_authorized = False
 
     if current_user.is_super_admin:
-    # Super Admins can mark attendance for any invitee in any organization.
-        invitee = Invitee.query.filter_by(id=invitee_id, organization_id=org.id).first_or_404()
         is_authorized = True
     elif current_user.is_org_admin and current_user.organization_id == org.id:
-        # Org Admins can only mark attendance for invitees within THEIR OWN assigned organization.
-        invitee = Invitee.query.filter_by(id=invitee_id, organization_id=org.id).first_or_404()
         is_authorized = True
     elif current_user.is_location_admin and current_user.organization_id == org.id:
-        invitee = Invitee.query.filter_by(id=invitee_id, organization_id=org.id).first_or_404()
-        is_authorized = True
-    
-    # If the user is not authorized by any of the above roles, deny access immediately.
-    if not is_authorized:
+        # Require location match for location admin
+        if getattr(current_user, "location_id", None) and getattr(event, "location_id", None):
+            if str(current_user.location_id) == str(event.location_id):
+                is_authorized = True
 
-        return jsonify({'status': 'error', 'message': 'You do not have permission to mark attendance for this organization or specific invitee.'}), 403 # Forbidden
-    # At this point, 'invitee' is guaranteed to be a valid Invitee object that the
-    # current user is authorized to modify.
+    if not is_authorized:
+        current_app.logger.info(f"[AUTH FAIL] user={current_user.id}, role=location_admin,"
+                                f"user_loc= {getattr(current_user, 'location_id', None)},event_loc={getattr(event,'location_id',None)}")
+                               
+        return jsonify({'status': 'error',
+            'message': 'Permission denied, because You are currently not in the location of event.'
+        }), 403
+    
+    # --- CSRF validation ---
     try:
         csrf_token = request.headers.get('X-CSRFToken')
         validate_csrf(csrf_token)
-       
-    except Exception as e:
-         return jsonify({'status': 'error', 'message': 'CSRF token missing or invalid.'}), 403
+    except Exception:
+        return jsonify({'status': 'error', 'message': 'CSRF token missing or invalid.'}), 403
 
     # Perform Attendance Marking Logic
     try:
-       # Prevent re-marking if already 'Present'
-        if invitee.confirmed == 'Present':
-            return jsonify({'status': 'error', 'message': 'Invitee has already been marked as Present'}), 400
+
+        invitee = Invitee.query.filter_by(id=invitee_id, organization_id=org.id).first_or_404()
+        
+        # Ensure the invitee is actually registered for the event
+        link = EventInvitee.query.filter_by(event_id=event.id, invitee_id=invitee.id).first_or_404()
+        
+        if link.status == 'Present':
+            return jsonify({'status': 'error', 'message': 'Invitee has already been marked Present'}), 400
+
+        # Update event-specific attendance too
+        link.status = 'Present'
+        link.responded_at = datetime.utcnow()
+
+        current_app.logger.info("Registration failed","info")
+      
+
+        # Prevent re-marking if already 'Present'
+        # if invitee.confirmed and invitee.confirmed.lower() == 'Present' or (link.status and link.status.lower() == 'present'):
+        #     return jsonify({'status': 'error', 'message': 'Invitee has already been marked as Present'}), 400
 
         invitee.confirmed = 'Present'
         invitee.confirmation_date = datetime.utcnow()
 
-        db.session.add(invitee)
         db.session.commit()
-
-        log_action('mark',user_id=current_user.id if current_user.is_authenticated else None,
-            record_type='invitee',record_id=invitee.id,associated_org_id=org.id)
         
-        return jsonify({'status': 'success', 'message': 'Invitee marked Present successfully'}), 200
+        log_action('mark_attendance', user_id=current_user.id if current_user.is_authenticated else None,
+            record_type='invitee',record_id=invitee.id,
+            # extra_data={'event_id': event.id},
+            associated_org_id=org.id)
+        
+        return jsonify({'status': 'success', 'message': f'{invitee.name} marked Present for {event.name}'}), 200
 
     except Exception as e:
         db.session.rollback()
@@ -748,35 +819,32 @@ def mark_invitee(org_uuid, invitee_id):
 
 ###########################################################
 
-@app_.route('/<uuid:org_uuid>/attendance/confirm', methods=['GET', 'POST'])
-def confirm_attendance(org_uuid):
+@app_.route('/<uuid:org_uuid>/<int:event_id>/attendance/confirm', methods=['GET', 'POST'])
+def confirm_attendance(org_uuid,event_id):
 
-    """ opened to all invitees to self mark attendance """
+    """ invitees self mark attendance and must be in the location"""
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
-    # org = Organization.query.filter_by(uuid=UUID(org_uuid)).first_or_404()
-    
-    now = datetime.utcnow()
-    if now < registration_deadline:
-        flash("You don't have access until 23rd May", "error")
-        return redirect(url_for('inv.register', org_uuid=org.uuid))
+    event=Event.query.filter_by(id=event_id, organization_id=org.id).first_or_404()
     
     # Get the organization's location(s)
     org_locations = Location.query.filter_by(organization_id=org.id).all()
     
-    if not org_locations:
-        flash('Event location not set. Please contact the administrator.', 'error')
-        return redirect(url_for('inv.register', org_uuid=org.uuid))
+    # if not org_locations:
+    #     flash('Event location not set. Please contact the administrator.', 'error')
+    #     return redirect(url_for('inv.register', org_uuid=org.uuid))
     
     form = AttendanceForm()
     
     if form.validate_on_submit():
-        phone_number = form.phone_number.data
+
+        raw_phone = form.phone_number.data.strip()
+        normalized_phone = normalize_phone(raw_phone, default_country_code="+234")
         user_latitude = form.latitude.data
         user_longitude = form.longitude.data
         
         # Find the invitee
         invitee = Invitee.query.filter_by(
-            phone_number=phone_number, 
+            phone_number=normalized_phone, 
             organization_id=org.id
         ).first()
         
@@ -784,12 +852,40 @@ def confirm_attendance(org_uuid):
             flash('Records not found. Please register first.', 'danger')
             return redirect(url_for('inv.register', org_uuid=org.uuid))
         
+        #find invitee-event link
+        link=EventInvitee.query.filter_by(invitee_id=invitee.id,event_id=event_id).first()
+
+        if not link:
+            return render_template(
+                    'invitee_status.html',
+                    org_uuid=org.uuid,
+                    status='not_registered',
+                    event=event,
+                    invitee=invitee,
+                    message= f"You are not registered fot this event."
+                    )
+
+        # event = link.event
+        # check date
+        today = datetime.utcnow().date()
+        
+        if today != event.start_time.date():
+            return render_template(
+                    'invitee_status.html',
+                    org_uuid=org.uuid,
+                    status='invalid_date',
+                    event=event,
+                    invitee=invitee,
+                    message= f"Attendance can only be confirmed on {event.start_time.strftime('%Y-%m-%d')}."
+                    )
+            
         # Check if already confirmed
         if invitee.confirmed == 'Present':
             return render_template(
                 'invitee_status.html',
                 org_uuid=org.uuid,
                 status='already_confirmed',
+                event=event,
                 invitee=invitee,
                 message="Attendance already marked for this invitee."
             )
@@ -821,6 +917,7 @@ def confirm_attendance(org_uuid):
                 'invitee_status.html',
                 org_uuid=org.uuid,
                 status='out_of_range',
+                event=event,
                 invitee=invitee,
                 message=f"You are not within the event location. You are {min_distance:.0f}m away from the nearest venue.",
                 distance=min_distance,
@@ -842,6 +939,7 @@ def confirm_attendance(org_uuid):
                 'Invitee Confirmed Attendance',
                 user_id=current_user.id if current_user.is_authenticated else None,
                 record_type='invitee',
+                event=event,
                 record_id=invitee.id,
                 organization_id=org.id
             )
@@ -850,6 +948,7 @@ def confirm_attendance(org_uuid):
                 'invitee_status.html',
                 org_uuid=org.uuid,
                 status='confirmed',
+                event=event,
                 invitee=invitee,
                 message="Attendance marked successfully.",
                 location_name=closest_location.name if closest_location else "Event Location"
@@ -858,24 +957,24 @@ def confirm_attendance(org_uuid):
         except Exception as e:
             db.session.rollback()
             flash('An error occurred while confirming attendance. Please try again.', 'danger')
-            return redirect(url_for('inv.confirm_attendance', org_uuid=org.uuid))
+            return redirect(url_for('inv.confirm_attendance',event_id=event.id, org_uuid=org.uuid))
     
     return render_template(
         'confirm_attendance.html', 
         org_uuid=org.uuid,
         org=org,
         form=form,
+        event=event,
         locations=org_locations  # Pass locations to template for display
     )
 
+
 ###############################################
 
-def generate_qr_code(org_uuid, invitee_id):
+def generate_qr_code(content: str):
     
-    # Generate the URL for confirmation
-    data = f"{request.host_url}{org_uuid}/confirm_qr_code_self/{invitee_id}"
-
-#  # Generate the correct URL using Flask's url_for
+#   # Generate the correct URL using Flask's url_for
+    #  # Generate the correct URL using Flask's url_for
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.
@@ -884,7 +983,7 @@ def generate_qr_code(org_uuid, invitee_id):
         border=4,
     )
 
-    qr.add_data(data)
+    qr.add_data(content)
     qr.make(fit=True)
     img = qr.make_image(fill='black', back_color='white')
     
@@ -899,101 +998,192 @@ def generate_qr_code(org_uuid, invitee_id):
 
 @app_.route('/<uuid:org_uuid>/register', methods=['GET', 'POST'])
 def register(org_uuid):
-    now = datetime.now()
-    
-    # org = Organization.query.filter_by(uuid=UUID(org_uuid)).first_or_404()
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
-    if now < registration_deadline:
-        flash("Registration is Closed.", "error")
-        return redirect(url_for('inv.index', org_uuid=org.uuid))
 
+    # Only upcoming events
+    upcoming_events = Event.query.filter(
+        Event.organization_id == org.id,
+        Event.start_time >= datetime.utcnow(),
+        Event.is_active.is_(True),
+        Event.status.in_(["upcoming", "pending"])
+    ).order_by(Event.start_time).all()
+
+    
     form = InviteeForm()
-
-    # Populate LGA choices if state is selected
     if form.state.data:
         form.lga.choices = [(lga, lga) for lga in fetch_lgas(form.state.data)]
-    
+
+    existing_invitee = None
+    registered_event_ids = []
+
+    # Prefill if existing
+    if request.method == "GET":
+        email = request.args.get("email")
+        phone = request.args.get("phone")
+        if email or phone:
+            existing_invitee = Invitee.query.filter(
+                Invitee.organization_id == org.id,
+                or_(
+                    Invitee.email == (email.lower() if email else None),
+                    Invitee.phone_number == phone
+                )
+            ).first()
+            if existing_invitee:
+                form = InviteeForm(obj=existing_invitee)
+                registered_event_ids = [link.event_id for link in existing_invitee.event_links]
+
     if form.validate_on_submit():
-        name = form.name.data.title()
-        email = form.email.data.lower()
-        phone_number = form.phone_number.data
-        state = form.state.data
-        gender = form.gender.data
-        lga = form.lga.data
-        address = form.address.data
-        position = form.position.data.title()
-        parish = form.parish.data
-        area = form.area.data 
-        
-        existing_invitee = Invitee.query.filter(
+        email = form.email.data.lower().strip()
+        phone = form.phone_number.data.strip()
+        # raw_phone = form.phone_number.data.strip()
+        # phone = normalize_phone(raw_phone, default_country_code="+234")
+ 
+
+        invitee = Invitee.query.filter(
             Invitee.organization_id == org.id,
-            or_(Invitee.phone_number == phone_number, Invitee.email == email)
+            or_(Invitee.email == email, Invitee.phone_number == phone)
         ).first()
-              
+
         
-        if existing_invitee:
-            flash("Member already exists.", "info")
-            return redirect(url_for('inv.register', org_uuid=org.uuid))
-        
-        if "@" not in form.email.data:
-            flash("Invalid email address.", "error")
-            return redirect(url_for('inv.register', org_uuid=org.uuid))
-        
-        try:
-            register_date = datetime.utcnow()
-            new_invitee = Invitee(name=name,phone_number=phone_number,gender=gender, state=state,
-                email=email,  area=area,address=address,parish=parish,position=position,
-                lga=lga,register_date=register_date, organization_id=org.id 
+        if invitee:
+            # Update profile
+            invitee.name = form.name.data.title()
+            invitee.email = email
+            invitee.phone_number = phone
+            invitee.address = form.address.data
+            invitee.state = form.state.data
+            invitee.lga = form.lga.data
+            invitee.gender = form.gender.data
+            invitee.position = form.position.data.title()
+        else:
+            invitee = Invitee(
+                name=form.name.data.title(),
+                email=email,
+                phone_number=phone,
+                address=form.address.data,
+                state=form.state.data,
+                lga=form.lga.data,
+                gender=form.gender.data,
+                position=form.position.data.title(),
+                register_date=datetime.utcnow(),
+                organization_id=org.id
             )
-            db.session.add(new_invitee)
-            db.session.commit()
-            
-            log_action(
-                'add',
-                user_id=current_user.id if current_user.is_authenticated else None,
-                record_type='invitee', record_id=new_invitee.id, associated_org_id=org.id
+            db.session.add(invitee)
+            db.session.flush()  # so invitee.id is available
+
+                  
+        # Event registration
+        event_id = request.form.get("event_id")
+        if event_id:
+            event = Event.query.get(int(event_id))
+            if not event or event.organization_id != org.id or event.start_time < datetime.utcnow():
+                flash("Invalid or expired event selected.", "danger")
+                return redirect(url_for('inv.register', org_uuid=org.uuid))
+
+            # ✅ Check for duplicate using relationship
+            already_registered = any(link.event_id == event.id for link in invitee.event_links)
+            if already_registered:
+                s = get_serializer()
+                token = s.dumps({"invitee_id": invitee.id, "event_id": event.id})
+
+                flash(f"You are already registered for '{event.name}'.", "info")
+                return redirect(url_for("inv.success", org_uuid=org.uuid, token=token))
+
+            # Create secure token
+            s = get_serializer()
+            token = s.dumps({"invitee_id": invitee.id, "event_id": event.id})
+
+            # Create new registration
+           
+            qr_url = url_for(
+                "inv.confirm_qr_code_self",
+                org_uuid=org.uuid,
+                token=token,
+                _external=True
             )
 
-            # Generate QR code URL using org_uuid
-            qr_code_path = url_for('inv.confirm_qr_code_self', org_uuid=org.uuid, invitee_id=new_invitee.id, _external=True)
+            link = EventInvitee(
+                event_id=event.id,
+                invitee_id=invitee.id,
+                status="accepted",
+                responded_at=datetime.utcnow(),
+                qr_code_path=qr_url
+            )
+            db.session.add(link)
 
-            new_invitee.qr_code_path = qr_code_path
-            db.session.commit()
+            try:
+                db.session.commit()
+                send_qr_code_email(invitee, qr_url, org)
+                flash("Registration successful! Please check your email for the QR code.", "success")
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.error(f"Registration failed: {e}")
+                flash("An error occurred during registration. Please Check your Internet and try again.", "danger")
+                return redirect(url_for('inv.register', org_uuid=org.uuid))
 
-            send_qr_code_email(new_invitee, qr_code_path)
+        return redirect(url_for("inv.success", org_uuid=org.uuid, token=token))
 
-            flash("Registration successful! A confirmation email has been sent!", "success")
-            return redirect(url_for('inv.success', org_uuid=org.uuid, invitee_id=new_invitee.id))
+    elif request.method == "POST":
+        current_app.logger.warning(f"Form validation failed: {form.errors}")
 
-        except smtplib.SMTPException as e:
-            db.session.rollback()
-            flash(f"Registration successful, but an error occurred while sending the email: {str(e)}", "error")
-            return redirect(url_for('inv.register', org_uuid=org.uuid))
+    return render_template(
+        "register.html",
+        form=form,
+        org=org,
+        org_uuid=org.uuid,
+        upcoming_events=upcoming_events,
+        existing_invitee=existing_invitee,
+        registered_event_ids=registered_event_ids,
+    )
 
-        except Exception as e:
-            db.session.rollback()
-            flash(f"Error saving to database: {str(e)}", "error")
-            return redirect(url_for('inv.register', org_uuid=org.uuid))
+# API LOOKUP
 
-    return render_template('register.html', form=form, org=org, org_uuid=org.uuid)
+@app_.route('/<uuid:org_uuid>/invitee_lookup')
+def invitee_lookup(org_uuid):
+    org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+    phone = request.args.get("phone")
+    email = request.args.get("email")
+
+    if not phone and not email:
+        return jsonify({"error": "Provide phone or email"}), 400
+
+    invitee = Invitee.query.filter(
+        Invitee.organization_id == org.id,
+        or_(Invitee.phone_number == phone, Invitee.email == email.lower() if email else None)
+    ).first()
+
+    if not invitee:
+        return jsonify({"exists": False})
+
+    return jsonify({
+        "exists": True,
+        "id": invitee.id,
+        "name": invitee.name,
+        "email": invitee.email,
+        "phone_number": invitee.phone_number,
+        "address": invitee.address,
+        "state": invitee.state,
+        "lga": invitee.lga,
+        "gender": invitee.gender,
+        "position": invitee.position
+    })
 
 
 ##########################################################
-@app_.route('/<uuid:org_uuid>/edit_invitee/<int:id>', methods=['GET', 'POST'])
+@app_.route('/<uuid:org_uuid>/edit_invitee/<int:event_id>/<int:id>', methods=['GET', 'POST'])
 @admin_or_super_required
-def edit_invitee(org_uuid, id):
+def edit_invitee(org_uuid, id,event_id):
     
     """Edit an existing invitee"""
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
-    
-    
+        
     state_lgas = fetch_lgas_all()
 
-    now = datetime.utcnow() # Use UTC for consistency
-    if now < registration_deadline:
-        flash("Editing invitees is not allowed until the specified deadline.", "danger")
-        # Consider redirecting to a page that explains the timeline
-        return redirect(url_for('inv.show_invitees', org_uuid=org.uuid)) # Use org.uuid consistently
+    # now = datetime.utcnow() # Use UTC for consistency
+    # if now < registration_deadline:
+    #     flash("Editing invitees is not allowed until the specified deadline.", "danger")
+    #     # Consider redirecting to a page that explains the timeline
+    #     return redirect(url_for('inv.show_invitees', org_uuid=org.uuid)) # Use org.uuid consistently
     # END deadline check
 
     is_authorized = False
@@ -1008,6 +1198,7 @@ def edit_invitee(org_uuid, id):
         # Redirect to a login page or a general unauthorized page
         return redirect(url_for('inv.universal_login')) # Assuming 'universal_login' is your generic login/dashboard
 
+    event=Event.query.filter_by(id=event_id, organization_id=org.id).first_or_404()
     invitee = Invitee.query.filter_by(id=id, organization_id=org.id).first_or_404()
 
     if request.method == 'POST':
@@ -1016,11 +1207,16 @@ def edit_invitee(org_uuid, id):
         new_phone_number = request.form['phone_number']
         new_state = request.form['state']
         new_lga = request.form['lga']
+        
 
-        existing_invitee = Invitee.query.filter_by(phone_number=new_phone_number).first()
-        if existing_invitee and existing_invitee.id != id:
+        existing_invitee = (Invitee.query.join(EventInvitee, EventInvitee.invitee_id == Invitee.id).filter(
+            Invitee.organization_id == org.id,
+            EventInvitee.event_id == event.id,
+            Invitee.phone_number==new_phone_number).first())
+
+        if existing_invitee and existing_invitee.id != invitee.id:
             flash('Invitee already exists.', 'danger')
-            return redirect(url_for('inv.edit_invitee', org_uuid=org.uuid, id=id))
+            return redirect(url_for('inv.edit_invitee', org_uuid=org.uuid, id=id,event_id=event.id))
 
         invitee.name = new_name
         invitee.position = new_position
@@ -1038,9 +1234,10 @@ def edit_invitee(org_uuid, id):
             db.session.rollback()
             flash(f'Error: {e}', 'danger')
 
-        return redirect(url_for('inv.show_invitees', org_uuid=org.uuid))
+        return redirect(url_for('inv.show_invitee_event', org_uuid=org.uuid,event_id=event.id))
 
-    return render_template('edit_invitee.html', org=org, invitee=invitee,state_lgas=state_lgas, org_uuid=org.uuid)
+    return render_template('edit_invitee.html', org=org, invitee=invitee,state_lgas=state_lgas, org_uuid=org.uuid, event=event)
+
 
 
 @app_.route('/<uuid:org_uuid>/feedback-chart', methods=['GET', 'POST'])
@@ -1129,47 +1326,90 @@ def submit_feedback(org_uuid):
 
 
 ##########################################################
-@app_.route('/<uuid:org_uuid>/success/<int:invitee_id>')
-def success(org_uuid, invitee_id):
+
+@app_.route('/<uuid:org_uuid>/success/<token>')
+def success(org_uuid, token):
     """
     Displays success page with QR code after invitee registration using secure UUID in URL.
     """
+
+    org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+    s = get_serializer()
+    try:
+        data = s.loads(token)  # verify signature
+        invitee_id = data["invitee_id"]
+        event_id = data["event_id"]
+    except Exception:
+        flash("Invalid or tampered link.", "danger")
+        return redirect(url_for("inv.register", org_uuid=org_uuid))
+    
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
 
-    invitee = Invitee.query.filter_by(id=invitee_id, organization_id=org.id).first()
-    if not invitee:
-        return "Invitee not found", 404
+    invitee = Invitee.query.filter_by(id=invitee_id, organization_id=org.id).first_or_404()
+    
+    #get last registered event link
+    link=EventInvitee.query.filter_by(invitee_id=invitee.id).order_by(EventInvitee.responded_at.desc()).first()
 
-    qr_code_path = generate_qr_code(org.uuid, invitee_id)  # Ensure it uses UUID now
+    if not link:
+        flash("No Event Registration found", "warning")
+        return redirect(url_for("inv.register", org_uuid=org.uuid))
+     
+    #generate QRcode image base64 from stored url
+    qr_code_path = generate_qr_code(link.qr_code_path)  # Ensure it uses UUID now
 
     return render_template(
         'success.html',
         org=org,
-        org_uuid=org.uuid,
         invitee=invitee,
-        invitee_id=invitee.id,
+        event=link.event,
         qr_code_path=qr_code_path
     )
 
+
 ############## admin scans invitee (him/herself) #############
-@app_.route('/<uuid:org_uuid>/confirm_qr_code_self/<int:invitee_id>', methods=['GET'])
+@app_.route('/<uuid:org_uuid>/confirm_qr_code_self/<token>', methods=['GET'])
 # @org_admin_required
 @csrf.exempt
-def confirm_qr_code_self(org_uuid, invitee_id):
+def confirm_qr_code_self(org_uuid,token):
     """
     Allows admin to confirm an invitee’s presence using secure UUID-based URL.
     """
-    now = datetime.now()
-    if now < registration_deadline:
-        flash("Access restricted until 23rd May", "error")
-        return redirect(url_for('inv.manage_invitee', org_uuid=org_uuid))
 
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
-
+    
+    s = get_serializer()
+    try:
+        data = s.loads(token)
+        invitee_id = data["invitee_id"]
+        event_id = data["event_id"]
+    except Exception:
+        flash("Invalid or tampered QR code.", "danger")
+        return redirect(url_for("inv.register", org_uuid=org_uuid))
+    
     invitee = Invitee.query.filter_by(id=invitee_id, organization_id=org.id).first()
+    #get last registered event link
+    link=EventInvitee.query.filter_by(invitee_id=invitee.id,event_id=event_id).first()
+
+    if not link:
+        flash('Invitee not found for this Event.', 'danger')
+        return redirect(url_for('inv.register',org_uuid=org_uuid))
+    
+    event = link.event
+    today =datetime.utcnow().date()
+    
+    if today != event.start_time.date():
+        return render_template(
+                'invitee_status.html',
+                org_uuid=org.uuid,
+                status='invalid_date',
+                event=event,
+                invitee=invitee,
+                message= f"Attendance can only be confirmed on {event.start_time.strftime('%Y-%m-%d')}."
+                )
+
     if not invitee:
         flash('Invitee not found.', 'danger')
-        return redirect(url_for('inv.index', org_uuid=org_uuid))
+        return redirect(url_for('inv.register', org_uuid=org_uuid))
 
     if invitee.deleted:
         return render_template(
@@ -1186,6 +1426,7 @@ def confirm_qr_code_self(org_uuid, invitee_id):
             org_uuid=org_uuid,
             status='already_confirmed',
             invitee=invitee,
+            event=event,
             message="Invitee already confirmed."
         )
 
@@ -1198,13 +1439,14 @@ def confirm_qr_code_self(org_uuid, invitee_id):
         log_action('self confirm invitee via QR',user_id=current_user.id if current_user.is_authenticated else None,
             record_type='invitee',record_id=invitee.id,associated_org_id=org.id)
 
-        send_confirm_email(invitee)
+        send_confirm_email(invitee, event, org)
 
         return render_template(
             'invitee_status.html',
             org_uuid=org_uuid,
             status='confirmed',
             invitee=invitee,
+            event=event,
             message="Invitee confirmed successfully."
         )
 
@@ -1213,32 +1455,6 @@ def confirm_qr_code_self(org_uuid, invitee_id):
         flash(f'An unexpected error occurred: {str(e)}', 'danger')
         return redirect(url_for('inv.index', org_uuid=org_uuid))
   
-
-#confirm email attendees
-
-def send_confirm_email(invitee):
-    try:
-         
-        msg = Message(
-            "WELCOME TO RCCG YAYA 2025",
-            sender="fac@fac.scrollintl.com",
-            recipients=[invitee.email]
-        )
-        msg.html = f"""
-                <p>Dear {invitee.name},</p>
-                <p>Your Attendance is confirmed!</p>
-                <p>Thank you for attending FAC 2025!<br></br>
-                <p>God bless you!</p>
-
-                <p>Thank you.</p>
-                <p>FAC Team.</p>
-                """
-        mail.send(msg)
-        print("Email sent successfully!")
-
-    except smtplib.SMTPException as e:
-        print(f"Error sending email: {e}")
-        raise e
 
 
 ########################################################
@@ -1254,20 +1470,72 @@ def invitee_status(org_uuid, invitee_id):
     return render_template('invitee_status.html', org_uuid=org.uuid, invitee=invitee)
 
 ###############################################
-@app_.route('/<uuid:org_uuid>/get_qr_code/<int:invitee_id>')
-def get_qr_code(org_uuid, invitee_id):
+@app_.route('/<uuid:org_uuid>/get_qr_code/<int:invitee_id>/<int:event_id>')
+def get_qr_code(org_uuid, invitee_id,event_id):
     """
     Returns the QR code path for the invitee using org UUID for security.
     """
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
-    qr_code_path = generate_qr_code(org.uuid, invitee_id)  # Make sure your function supports UUID
+    invitee = Invitee.query.filter_by(id=invitee_id, organization_id=org.id).first_or_404()
+    event = Event.query.filter_by(id=event_id, organization_id=org.id).first_or_404()
+       
+    # buid unique str to be passed to QR
+    qr_content =f"{org.uuid}:{invitee.id}:{event.id}"
+    qr_code_path = generate_qr_code(qr_content)
+    # qr_code_path = generate_qr_code(org.uuid, invitee.id,event.id)  # Make sure your function supports UUID
     return jsonify({'qr_code_path': qr_code_path})
-
 
 ####################################
 
+@app_.route('/<uuid:org_uuid>/manage_invitee/', methods=['GET', 'POST'])
+@org_admin_or_super_required
+def manage_all_invitee(org_uuid):
+    """
+    Allows super admins or org admins to search and manage invitees.
+    Super admins can manage all specific organization's invitees.
+    Org admins can only manage their own organization's invitees.
+    """
+    org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+    event=Event.query.filter_by(organization_id=org.id).first_or_404()
+
+
+    # Role-based access control
+    if not current_user.is_super_admin:
+        if not (current_user.is_org_admin) or current_user.organization_id != org.id:
+            flash("You do not have permission to manage invitees for this organization.", "danger")
+            return redirect(url_for('inv.login',org_uuid=org.uuid))
+    
+    # Base query
+    invitees_query = Invitee.query.filter_by(deleted=False,organization_id=org.id)
+    
+    # Search & pagination
+    search = request.args.get('search', '', type=str)
+    page = request.args.get('page', 1, type=int)
+    per_page = 10
+
+    if search:
+        invitees_query = invitees_query.filter(
+            db.or_(
+                Invitee.name.ilike(f'%{search}%'),
+                Invitee.email.ilike(f'%{search}%'),
+                Invitee.phone_number.ilike(f'%{search}%')
+            )
+        )
+        if invitees_query.count() == 0:
+            flash("No invitees found.", "danger")
+
+    pagination = invitees_query.order_by(Invitee.register_date,Invitee.confirmation_date.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    invitees = pagination.items
+
+    return render_template('del_inv.html',
+        org=org,org_uuid=org.uuid,invitees=invitees,event=event,pagination=pagination,
+        search=search, is_super=current_user.is_super)
+
+
+
+
 @app_.route('/<uuid:org_uuid>/invitees')
-@admin_or_super_required # This decorator already ensures one of the 3 admin types is logged in
+@org_admin_or_super_required # This decorator already ensures one of the 3 admin types is logged in
 def show_invitees(org_uuid):
     """
     Displays invitees for a specific organization,
@@ -1277,24 +1545,29 @@ def show_invitees(org_uuid):
     try:
         # Use str(org_uuid) to ensure consistency with string-based UUIDs from filter_by
         org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+        event=Event.query.first_or_404()
+
     except ValueError: # This ValueError catch is for if org_uuid couldn't be converted to UUID type
         flash('Invalid organization identifier.', 'danger')
         return redirect(url_for('inv.universal_login')) # Redirect to universal login if UUID is invalid
+
 
     # --- Role-based access control (Refined) ---
     invitees_query = None # Initialize to None
 
     if current_user.is_super_admin: # Use the correct property name
         # Super Admins can see all invitees for any organization
-        invitees_query = Invitee.query.filter_by(organization_id=org.id)
+        invitees_query = Invitee.query.filter_by(organization_id=org.id).options(joinedload(Invitee.event_links).joinedload(EventInvitee.event))
+    
     elif current_user.is_org_admin and current_user.organization_id == org.id:
         # Org Admins can only see invitees for their own organization
-        invitees_query = Invitee.query.filter_by(organization_id=org.id)
+        invitees_query = Invitee.query.filter_by(organization_id=org.id).options(joinedload(Invitee.event_links).joinedload(EventInvitee.event))
+    
     elif current_user.is_location_admin and current_user.organization_id == org.id:
         # Location Admins can see invitees for their specific organization
         # Optionally, add further filtering if they should only see invitees for their specific location
         # For now, let's assume they see all for their org, but you can refine:
-        invitees_query = Invitee.query.filter_by(organization_id=org.id)
+        invitees_query = Invitee.query.filter_by(organization_id=org.id).options(joinedload(Invitee.event_links).joinedload(EventInvitee.event))
         # If a Location Admin should ONLY see invitees for THEIR location:
         # if current_user.location_id: # Assuming Admin model has location_id
         #     invitees_query = invitees_query.filter_by(location_id=current_user.location_id)
@@ -1349,7 +1622,8 @@ def show_invitees(org_uuid):
 
     # --- Pagination ---
     # Ensure order_by is applied before paginate
-    pagination = invitees_query.order_by(Invitee.id.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    pagination = invitees_query.order_by(Invitee.register_date,Invitee.confirmation_date.desc()).paginate(page=page, per_page=per_page, error_out=False)
+
     invitees = pagination.items
 
     # --- Render Template ---
@@ -1366,30 +1640,191 @@ def show_invitees(org_uuid):
         present_male=present_male,
         present_female=present_female,
         absent_male=absent_male,
+        event=event,
         absent_female=absent_female,
         is_super=current_user.is_super_admin # Pass the correct property to the template
     )
 
 # ######################################...............
-@app_.route('/<uuid:org_uuid>/manage_invitee', methods=['GET', 'POST'])
+@app_.route('/<uuid:org_uuid>/dashboard_events/<int:event_id>', methods=['GET', 'POST'])
+@admin_or_super_required # This decorator already ensures one of the 3 admin types is logged in
+def show_invitee_event(org_uuid,event_id):
+    """
+    Displays all invitees for a specific Event in specific organization,
+    filtered by user role and optional search query.
+    """
+
+    try:
+        # Use str(org_uuid) to ensure consistency with string-based UUIDs from filter_by
+        org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+        event=Event.query.filter_by(id=event_id, organization_id=org.id).first_or_404()
+
+
+    except ValueError: # This ValueError catch is for if org_uuid couldn't be converted to UUID type
+        flash('Invalid organization identifier.', 'danger')
+        return redirect(url_for('inv.universal_login')) # Redirect to universal login if UUID is invalid
+
+
+    # --- Role-based access control (Refined) ---
+    invitees_query = None # Initialize to None
+
+    if current_user.is_super_admin: # Use the correct property name
+        # Super Admins can see all invitees for any organization
+        # --- Base query: invitees for this event only ---
+        
+        invitees_query = (
+        Invitee.query
+        .join(EventInvitee, EventInvitee.invitee_id == Invitee.id)
+        .filter(
+            Invitee.organization_id == org.id,
+            Invitee.deleted==False,
+            EventInvitee.event_id == event.id
+        )
+        .options(joinedload(Invitee.event_links).joinedload(EventInvitee.event))
+        )
+        # deleted=False,
+        
+    elif current_user.is_org_admin and current_user.organization_id == org.id:
+        # Org Admins can only see invitees for their own organization
+        invitees_query = (
+        Invitee.query
+        .join(EventInvitee, EventInvitee.invitee_id == Invitee.id)
+        .filter(
+            Invitee.deleted==False,
+            Invitee.organization_id == org.id,
+            EventInvitee.event_id == event.id
+        )
+        .options(joinedload(Invitee.event_links).joinedload(EventInvitee.event))
+         )
+    elif current_user.is_location_admin and current_user.organization_id == org.id:
+        # Location Admins can see invitees for their specific organization
+        # Optionally, add further filtering if they should only see invitees for their specific location
+        # For now, let's assume they see all for their org, but you can refine:
+        invitees_query = (
+        Invitee.query
+        .join(EventInvitee, EventInvitee.invitee_id == Invitee.id)
+        .filter(
+            Invitee.deleted==False,
+            Invitee.organization_id == org.id,
+            EventInvitee.event_id == event.id
+        )
+        .options(joinedload(Invitee.event_links).joinedload(EventInvitee.event))
+         )
+        
+        # If a Location Admin should ONLY see invitees for THEIR location:
+        # if current_user.location_id: # Assuming Admin model has location_id
+        #     invitees_query = invitees_query.filter_by(location_id=current_user.location_id)
+        # else:
+        #     flash("Location Admin without an assigned location cannot view invitees.", "danger")
+        #     return redirect(url_for('app_.dashboard_or_some_safe_page')) # Redirect if location not set
+    
+    # If invitees_query is still None, it means the user passed the @admin_access_required
+    # but didn't meet the *specific* criteria for this route's content.
+    if invitees_query is None:
+        flash('Access denied to this organization’s invitees based on your specific role and organization context.', 'danger')
+        # Redirect to a safer, more general admin dashboard or the universal login
+        # Use the org.uuid if available for the universal login redirect, but only if it's the target.
+        return redirect(url_for('inv.universal_login'))
+
+
+    # --- Search & filtering ---
+    search = request.args.get('search', '', type=str)
+    page = request.args.get('page', 1, type=int)
+    per_page = 10
+
+    if search:
+        # Using .ilike for case-insensitive search
+        invitees_query = invitees_query.filter(
+            (Invitee.name.ilike(f'%{search}%')) |
+            (Invitee.phone_number.ilike(f'%{search}%')) |
+            # Check if Invitee.id is integer; if so, convert search to int for direct comparison
+            # If Invitee.id is a string, then ilike is fine. Assuming integer ID for now.
+            (Invitee.id == int(search) if search.isdigit() else False) # Safer ID search
+        )
+        # If you want to flash only if no invitees match AND the search query was not empty
+        if invitees_query.count() == 0 and search: # Only flash if search was performed and no results
+            flash(f'No invitees matched your search for "{search}".', 'info')
+
+    # --- Statistics ---
+    # Perform count on the filtered query
+    no_invitee_present = invitees_query.filter(Invitee.confirmed == 'Present').count()
+    no_invitee_absent = invitees_query.filter(Invitee.confirmed == 'Absent').count()
+    no_invitees = invitees_query.count() # Total count after search/filter
+
+    # --- Gender Breakdown: Total ---
+    total_male = invitees_query.filter(Invitee.gender == 'Male').count()
+    total_female = invitees_query.filter(Invitee.gender == 'Female').count()
+
+    # --- Gender Breakdown: Present ---
+    present_male = invitees_query.filter(Invitee.confirmed == 'Present',Invitee.gender == 'Male').count()
+    present_female = invitees_query.filter(Invitee.confirmed == 'Present',Invitee.gender == 'Female').count()
+
+    # --- Gender Breakdown: Absent ---
+    absent_male = invitees_query.filter(Invitee.confirmed == 'Absent',Invitee.gender == 'Male').count()
+    absent_female = invitees_query.filter(Invitee.confirmed == 'Absent',Invitee.gender == 'Female').count()
+
+    # --- Pagination ---
+    # Ensure order_by is applied before paginate
+    pagination = invitees_query.order_by(Invitee.register_date,Invitee.confirmation_date.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    # pagination = invitees_query.order_by(Invitee.id.desc()).paginate(page=page, per_page=per_page, error_out=False)
+
+    invitees = pagination.items
+
+
+    # --- Map invitee -> event link ---
+    event_links_map = {}
+    for invitee in invitees:
+        link = next((l for l in invitee.event_links if l.event_id == event.id), None)
+        if link:
+            event_links_map[invitee.id] = link
+
+    return render_template(
+        "event_invitee.html",
+        org=org,
+        org_uuid=str(org.uuid),
+        event=event,
+        invitees=invitees,
+        pagination=pagination,
+        event_links_map=event_links_map,
+        no_invitee_present=no_invitee_present,
+        no_invitee_absent=no_invitee_absent,
+        no_invitees=no_invitees,
+        total_male=total_male,
+        total_female=total_female,
+        present_male=present_male,
+        present_female=present_female,
+        absent_male=absent_male,
+        absent_female=absent_female,
+        is_super=current_user.is_super_admin,
+    )
+
+
+@app_.route('/<uuid:org_uuid>/manage_invitee/<int:event_id>', methods=['GET', 'POST'])
 @admin_or_super_required
-def manage_invitee(org_uuid):
+def manage_invitee(org_uuid,event_id):
     """
     Allows super admins or org admins to search and manage invitees.
     Super admins can manage any organization's invitees.
     Org admins can only manage their own organization's invitees.
     """
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
-
+    event=Event.query.filter_by(id=event_id, organization_id=org.id).first_or_404()
+    
     # Role-based access control
     if not current_user.is_super_admin:
         if not (current_user.is_location_admin or current_user.is_org_admin) or current_user.organization_id != org.id:
             flash("You do not have permission to manage invitees for this organization.", "danger")
             return redirect(url_for('inv.login',org_uuid=org.uuid))
 
+    
     # Base query
-    invitees_query = Invitee.query.filter_by(deleted=False, organization_id=org.id)
-
+    invitees_query = (
+        Invitee.query
+        .join(EventInvitee, EventInvitee.invitee_id == Invitee.id)
+        .filter(
+            Invitee.deleted==False,
+            Invitee.organization_id==org.id, EventInvitee.event_id==event_id))
+    
     # Search & pagination
     search = request.args.get('search', '', type=str)
     page = request.args.get('page', 1, type=int)
@@ -1409,33 +1844,186 @@ def manage_invitee(org_uuid):
     invitees = pagination.items
 
     return render_template('del_inv.html',
-        org=org,org_uuid=org.uuid,invitees=invitees,pagination=pagination,
+        org=org,org_uuid=org.uuid,invitees=invitees,event=event,pagination=pagination,
         search=search, is_super=current_user.is_super)
+
+
+# ################################################
+
+@app_.route('/<uuid:org_uuid>/dashboard_events')
+@admin_or_super_required
+def show_event_invitees(org_uuid):
+    """
+    Dashboard: show events for an org (past/upcoming/all) with invitee stats,
+    search and pagination.
+    """
+    org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+
+    # Base events query for this org
+    events_query = Event.query.filter_by(organization_id=org.id)
+
+    # Role-based access refinement (optional extra filtering for location_admins)
+    if current_user.is_location_admin and current_user.organization_id == org.id:
+        # if you want to restrict to specific location_id:
+        # if hasattr(current_user, "location_id") and current_user.location_id:
+        #     events_query = events_query.filter_by(location_id=current_user.location_id)
+        pass
+
+    # --- Filters from query params ---
+    date_filter = request.args.get("date", "all")  # values: all | upcoming | past
+    now = datetime.utcnow()
+    if date_filter == "upcoming":
+        events_query = events_query.filter(Event.start_time >= now)
+    elif date_filter == "past":
+        events_query = events_query.filter(Event.end_time < now)
+
+    # Search by event name
+    search = (request.args.get("search") or "").strip()
+    if search:
+        events_query = events_query.filter(Event.name.ilike(f"%{search}%"))
+
+    # Optional: filter events by invitee name/phone (only show events that have that invitee)
+    invitee_search = (request.args.get("invitee") or "").strip()
+    if invitee_search:
+        events_query = events_query.join(EventInvitee).join(Invitee).filter(
+            or_(
+                Invitee.name.ilike(f"%{invitee_search}%"),
+                Invitee.phone_number.ilike(f"%{invitee_search}%")
+            )
+        ).distinct()
+
+    # Ordering & paginate
+    events_query = events_query.order_by(Event.start_time.desc())
+
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 5, type=int)
+    paginated = events_query.paginate(page=page, per_page=per_page, error_out=False)
+    events = paginated.items
+
+    # --- Build stats per event (registered, present, rsvp break down, gender break down) ---
+    event_stats = {}
+    for ev in events:
+        # total registered for this event
+        total_registered = db.session.query(func.count(EventInvitee.invitee_id))\
+            .filter(EventInvitee.event_id == ev.id)\
+            .scalar() or 0
+
+        # total present (status stored on EventInvitee.status)
+        total_present = db.session.query(func.count(EventInvitee.invitee_id))\
+            .filter(EventInvitee.event_id == ev.id, EventInvitee.status == 'Present')\
+            .scalar() or 0
+
+        # RSVP breakdown (status counts)
+        rsvp_rows = db.session.query(EventInvitee.status, func.count(EventInvitee.invitee_id))\
+            .filter(EventInvitee.event_id == ev.id)\
+            .group_by(EventInvitee.status).all()
+        rsvp = {row[0]: row[1] for row in rsvp_rows}
+
+        # Gender breakdown of registered invitees (join invitee)
+        gender_rows = db.session.query(Invitee.gender, func.count(Invitee.id))\
+            .join(EventInvitee, Invitee.id == EventInvitee.invitee_id)\
+            .filter(EventInvitee.event_id == ev.id)\
+            .group_by(Invitee.gender).all()
+        gender = {row[0] or "Unknown": row[1] for row in gender_rows}
+
+        event_stats[ev.id] = {
+            "total_registered": int(total_registered),
+            "total_present": int(total_present),
+            "rsvp": rsvp,
+            "gender": gender
+        }
+
+    # --- overall quick stats for the page (optional) ---
+    total_events = events_query.count()
+    total_registrations = db.session.query(func.count(EventInvitee.invitee_id))\
+        .join(Event, Event.id == EventInvitee.event_id)\
+        .filter(
+        # Invitee.deleted==False,
+        Event.organization_id == org.id).scalar() or 0
+
+    return render_template(
+        "dashboard_events.html",
+        org=org,
+        events=events,
+        pagination=paginated,
+        event_stats=event_stats,
+        total_events=total_events,
+        total_registrations=int(total_registrations),
+        search=search,
+        invitee_search=invitee_search,
+        date_filter=date_filter,
+    )
+
 
 #dummy testing........for offline..........................
 
-def send_qr_code_email(invitee, qr_code_path):
-    try:
-        msg = Message(
-            "Your Invite QR Code",
-            sender="invite@fac.com",  # Replace with your sender email
-            recipients=[invitee.email])
-        
-        msg.html = f"""
-        <p>Dear {invitee.name},</p>
-        <p>Thank you for registering. Below is your QR code:</p>
-        <img src="data:image/png;base64,{qr_code_path}" alt="QR Code">
-        <br></br>
-        <p>Please this QR code will be needed to confirm your attendance.</p>
-        <p>Thank you.</p>
-        <p>FAC Team.</p>
-        """
-        mail.send(msg)
-        print("Email sent successfully!")
+# def send_qr_code_email(invitee, qr_url, org):
+#     try:
+#         # Generate QR code image
+#         qr = qrcode.make(qr_url)
+#         buffer = BytesIO()
+#         qr.save(buffer, format="PNG")
+#         qr_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
-    except smtplib.SMTPException as e:
+#         # use organization email
+#         sender_email=  getattr(org, "email", None) or "noreply@noreply.com"
+        
+#         msg = Message(
+#             subject = f"Registration Confirmation -{org.name}",
+#             sender = sender_email,  # Replace with your sender email
+#             recipients=[invitee.email]
+#         )
+
+#         msg.html = f"""
+#         <p>Dear {invitee.name},</p>
+#         <p>Thank you for registering. Below is your QR code:</p>
+#         <img src="data:image/png;base64,{qr_base64}" alt="QR Code">
+#         <br>
+#         <p>This QR code will be needed to confirm your attendance.</p>
+#         <p>Thank you.</p>
+#         <p><strong>{org.name} Team</strong></p>
+#         """
+
+#         mail.send(msg)
+#         print("Email sent successfully!")
+
+#     except Exception as e:
+#         print(f"Error sending email: {e}")
+#         raise
+
+
+def send_qr_code_email(invitee, qr_url, org):
+    try:
+        # Generate QR code as Base64
+        qr = qrcode.make(qr_url)
+        buffer = BytesIO()
+        qr.save(buffer, format="PNG")
+        qr_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+        sender_email = getattr(org, "email", None) or "noreply@noreply.com"
+
+        msg = Message(
+            subject=f"Registration Confirmation - {org.name}",
+            sender=sender_email,
+            recipients=[invitee.email],
+        )
+
+        msg.html = render_template(
+            "emails/qr_code_email.html",
+            invitee=invitee,
+            org=org,
+            qr_base64=qr_base64,
+            qr_url=qr_url
+        )
+
+        mail.send(msg)
+        print("QR Code email sent successfully!")
+
+    except Exception as e:
         print(f"Error sending email: {e}")
-        raise e
+        raise
+
+
 
 ######################################################
 @app_.route('/<uuid:org_uuid>/export_invitees', methods=['GET'])
@@ -1467,8 +2055,8 @@ def export_invitees(org_uuid):
             'Phone': i.phone_number or '',
             'Gender': i.gender or '',
             'Email': i.email or '',
-            'Parish': i.parish or '',
-            'Area': i.area or '',
+            # 'Parish': i.parish or '',
+            # 'Area': i.area or '',
             'State': i.state or '',
             'LGA': i.lga or '',
             'Position': i.position or '',
@@ -1502,6 +2090,31 @@ def export_invitees(org_uuid):
 
 
 ######################################################
+
+@app_.route('/login/<token>')
+def login_with_token(token):
+    email = verify_reset_token(token)
+    if not email:
+        flash("Invalid or expired login link.", "danger")
+        return redirect(url_for("inv.universal_login"))
+    
+    admin = Admin.query.filter_by(email=email).first_or_404()
+
+    if not admin:
+        flash("Admin account not found.", "danger")
+        return redirect(url_for("inv.universal_login"))
+
+    # login user
+    login_user(admin)
+    flash(f"Welcome back {admin.name}!.", "success")
+    event = Event.query.filter_by(organization_id=admin.organization.id).order_by(Event.start_time.desc()).first()
+    if event:
+        return redirect(url_for("inv.show_invitee_event", org_uuid=admin.organization.uuid, event_id=event.id))
+    else:
+        return redirect(url_for("inv.show_event_invitees", org_uuid=admin.organization.uuid))
+
+
+
 @app_.route('/<uuid:org_uuid>/register_admin', methods=['GET', 'POST'])
 @org_admin_or_super_required
 # @super_required # Re-enable your super_required or org_admin_required decorator here
@@ -1510,16 +2123,27 @@ def register_admin(org_uuid):
 
     # Get the organization by UUID
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
-
+    
+    #add unaassigned
+    form.location_id.choices =[(0, "Unassigned")] + [
+        (loc.id, loc.name) for loc in Location.query.filter_by(organization_id=org.id).all()]
+    
     if form.validate_on_submit():
+        # # new location
+        location_id = form.location_id.data if form.location_id.data != 0 else None
+
         name = form.name.data.title()
         gender = form.gender.data
-        email = form.email.data.lower()
+        email = form.email.data.title().lower()
         address = form.address.data.title()
         role = form.role.data
-        phone_number = form.phone_number.data
-        password = form.password.data 
+        # phone_number = form.phone_number.data
+        phone_number  = form.phone_number.data.strip()
+        # phone_number = normalize_phone(raw_phone, default_country_code="+234")
+ 
+        password = form.password.data
 
+        
         # Check for duplicates within the same org
         # IMPORTANT: Consider if phone_number should be unique *per organization* or globally.
         # The current query checks for uniqueness within the organization scope for email and phone.
@@ -1539,29 +2163,33 @@ def register_admin(org_uuid):
                 address=address,created_at =datetime.utcnow(), # Keep for legacy if needed, or use 'created_at'
                 email=email,
                 role=role,
+                location_id =location_id,
                 # is_admin=True, # No longer strictly needed if 'role' is primary
                 organization_id=org.id
             )
             
             # --- CRUCIAL CHANGE: Use new_admin.set_password() ---
             new_admin.set_password(password) 
-         
+            
             db.session.add(new_admin)
             db.session.commit()
+
+            """send login email to new admin"""
+            send_admin_login_link(new_admin,org)
 
             # Log the action (ensure current_user is available via @login_required)
             log_action('add', user_id=current_user.id, record_type='Admin', record_id=new_admin.id, associated_org_id=org.id)
 
             # --- UPDATED FLASH MESSAGE ---
             flash(f"Admin '{new_admin.name}' registered successfully. They can now log in with their chosen password.", "success")
-                  
+        
             # Assuming 'admin.management_dashboard' is now 'app_.management_dashboard'
             return redirect(url_for('admin.management_dashboard', org_uuid=org.uuid))
 
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Error registering admin: {str(e)}", exc_info=True)
-            flash(f"Error saving to database: {str(e)}", "error")
+            current_app.logger.error(f"Error registering admin: {e}")
+            flash("Error, Admin already exist", "danger")
             return render_template('register_admin.html', org=org, org_uuid=org.uuid, form=form) # Re-render form on error
 
     # For GET requests or validation failures, render the template
@@ -1571,11 +2199,15 @@ def register_admin(org_uuid):
 #............edit function....................
 
 @app_.route('/<uuid:org_uuid>/edit_admin/<int:id>', methods=['GET', 'POST'])
-@super_required
+# @super_required
+@admin_or_super_required
 def edit_admin(org_uuid, id):
 
     # Get the organization using UUID
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+    # Get the organization's location(s)
+    org_locations = Location.query.filter_by(organization_id=org.id).all()
+    
     # Find the admin within this organization
     admin = Admin.query.filter_by(id=id, organization_id=org.id).first_or_404()
 
@@ -1583,7 +2215,18 @@ def edit_admin(org_uuid, id):
         # Get form data and strip whitespace
         new_name = request.form['name'].strip()
         new_email = request.form.get('email', '').strip()
-        new_password = request.form['password'].strip()
+        new_password = request.form.get('password','').strip()
+        new_gender = request.form.get('gender').strip()
+        new_phone_number = request.form.get('phone_number').strip()
+        
+        # new_phone_number = normalize_phone(raw_phone, default_country_code="+234")
+
+        # new location and if its optional
+        new_location_id = request.form.get('location_id','').strip()
+        if new_location_id:
+            new_location_id= int(new_location_id)
+        else:
+            new_location_id = None
 
         # Check for duplicate email in another admin
         existing_admin = Admin.query.filter_by(email=new_email).first()
@@ -1591,7 +2234,7 @@ def edit_admin(org_uuid, id):
             flash('An admin with this email already exists.', 'danger')
             return redirect(url_for('inv.edit_admin', id=admin.id, org_uuid=org.uuid))
         
-                # Password validation (if provided)
+        # Password validation (if provided)
         if new_password:
             if len(new_password) < 6: # Example minimum length
                 flash('Password must be at least 6 characters long.', 'danger')
@@ -1601,8 +2244,16 @@ def edit_admin(org_uuid, id):
         # Update admin fields
         admin.name = new_name
         admin.email = new_email
+        admin.phone_number = new_phone_number
+        admin.gender = new_gender
+
         if new_password:
             admin.password = generate_password_hash(new_password)
+
+        # assign location to only location admin
+        if admin.role == 'location_admin':
+            if new_location_id and str(new_location_id).isdigit():
+                admin.location_id = int(new_location_id)
 
         admin.updated_at = datetime.utcnow()
 
@@ -1617,19 +2268,31 @@ def edit_admin(org_uuid, id):
             db.session.rollback()
             flash(f'An error occurred: {e}', 'danger')
 
-        return render_template('edit_admin.html',admin=admin,org=org)
+        return render_template('edit_admin.html',admin=admin,org=org,org_locations=org_locations)
 
-    return render_template('edit_admin.html',admin=admin,org=org)
+    return render_template('edit_admin.html',admin=admin,org=org,org_locations=org_locations)
 
-  
 
+@app_.route('/<uuid:org_uuid>/profile', methods=['GET', 'POST'])
+@admin_or_super_required
+def view_admin(org_uuid):
+
+    # Get the organization using UUID
+    org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+    
+    if not current_user.is_super_admin:
+        if current_user.organization_id != org.id:
+            flash("You are not authorized to view this profile","danger")
+            return redirect(url_for('inv.universal_login',org=org))
+    return render_template("view_admin.html", org=org, admin=current_user)
+        
 
 # ............delete function..................
 
-@app_.route('/<uuid:org_uuid>/del_admin/<int:admin_id>', methods=['POST'])
-@super_required
-def del_admin(org_uuid, admin_id):
 
+@app_.route('/<uuid:org_uuid>/del_admin/<int:admin_id>', methods=['POST'])
+@org_admin_or_super_required
+def del_admin(org_uuid, admin_id):
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
     admin = Admin.query.filter_by(id=admin_id, organization_id=org.id).first_or_404()
 
@@ -1637,23 +2300,45 @@ def del_admin(org_uuid, admin_id):
         csrf_token = request.headers.get('X-CSRFToken')
         validate_csrf(csrf_token)
 
-        if not admin:
-            return jsonify({'status': 'error', 'message': 'Admin not found'}), 400
-
         if admin.organization.uuid != org_uuid:
             return jsonify({'status': 'error', 'message': 'Unauthorized access'}), 403
 
-        # Delete permanently
-        db.session.delete(admin)
+        # super admin
+        if admin.role == 'super_admin':
+            return jsonify({'status': 'error', 'message': 'Unauthorized access'}), 403
+
+        # Detach location if exists
+        if admin.location_id:
+            admin.location_id = None
+
+        if current_user.is_super_admin:
+            # Delete permanently
+            db.session.delete(admin)
+            action ="permanent_delete"
+        elif current_user.is_org_admin and current_user.organization_id == org.id:
+            #soft delete
+            admin.is_active = False
+            action= "soft delete"
+        else:
+            return jsonify({'status': 'error', 'message': 'Unauthorized access'}), 403
+    
+         # Delete permanently
+        # db.session.delete(admin)
         db.session.commit()
-      
-        log_action('delete',user_id=current_user.id if current_user.is_authenticated else None,
-            record_type='Admin',record_id=admin.id,associated_org_id=org.id)
+
+        log_action(
+            'delete',
+            user_id=current_user.id if current_user.is_authenticated else None,
+            record_type='Admin',
+            record_id=admin.id,
+            associated_org_id=org.id
+        )
         return jsonify({'status': 'success', 'message': 'Admin deleted successfully'}), 200
 
     except Exception as e:
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 400
+
 
 
 @app_.route('/<uuid:org_uuid>/manage_admin', methods=['GET', 'POST'])
@@ -1679,10 +2364,9 @@ def manage_admin(org_uuid):
         )
         if admins_query.count() == 0:
             flash('Admin not found', 'danger')
-
-    pagination = admins_query.filter(Admin.is_super == False).order_by(Admin.id.desc()).paginate(
-        page=page, per_page=per_page, error_out=False
-    )
+    # i am trying not 
+    pagination = admins_query.filter(Admin.role != 'super_admin').order_by(Admin.updated_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False)
     admins = pagination.items
 
     return render_template('del_admin.html', org=org, org_uuid=org.uuid,
@@ -1719,7 +2403,7 @@ def all_feedback(org_uuid):
 # ....................................#
 
 @app_.route('/<uuid:org_uuid>/locations')
-@admin_or_super_required # This decorator is key for initial permission and org_uuid validation
+@org_admin_or_super_required # This decorator is key for initial permission and org_uuid validation
 def manage_locations(org_uuid):
     
     """location managers"""
@@ -2104,7 +2788,8 @@ def add_event(org_uuid):
 
 @app_.route('/<uuid:org_uuid>/events', methods=['GET'])
 @admin_or_super_required
-def view_event(org_uuid):
+def view_event_detail(org_uuid):
+    
     """Display all events for an organization with pagination"""
     
     # Get the organization
@@ -2212,7 +2897,7 @@ def edit_event(org_uuid, event_id):
         ).first_or_404()
     except Exception as e:
         flash('Event not found.', 'danger')
-        return redirect(url_for('inv.view_event', org_uuid=org.uuid))
+        return redirect(url_for('inv.view_event_detail', org_uuid=org.uuid))
 
     # Role-based Access Control
     if current_user.is_super_admin:
@@ -2281,7 +2966,7 @@ def edit_event(org_uuid, event_id):
             
             db.session.commit()
             flash("Event updated successfully.", "success")
-            return redirect(url_for('inv.view_event', org_uuid=org.uuid))
+            return redirect(url_for('inv.view_event_detail', org_uuid=org.uuid))
             
         except Exception as e:
             db.session.rollback()
@@ -2314,7 +2999,7 @@ def delete_event(org_uuid, event_id):
         ).first_or_404()
     except Exception as e:
         flash('Event not found.', 'danger')
-        return redirect(url_for('inv.view_event', org_uuid=org.uuid))
+        return redirect(url_for('inv.view_event_detail', org_uuid=org.uuid))
 
     # Role-based Access Control
     if current_user.is_super_admin:
@@ -2346,7 +3031,7 @@ def delete_event(org_uuid, event_id):
         # current_app.logger.error(f"Error deleting event {event_id}: {e}")
         flash("An error occurred while deleting the event. Please try again.", "danger")
 
-    return redirect(url_for('inv.view_event', org_uuid=org.uuid))
+    return redirect(url_for('inv.view_event_detail', org_uuid=org.uuid))
 
 ###################################################################
 #super admin dashboard
@@ -2445,7 +3130,7 @@ def forgot_password_request(org_uuid):
     
     # If the user is already logged in, no need to reset password
     if current_user.is_authenticated:
-        return redirect(url_for('inv.login'))  # Replace with your default logged-in page
+        return redirect(url_for('inv.login',org_uuid=org.uuid))  # Replace with your default logged-in page
 
     form = RequestResetForm() # This form will just have an email field
 
@@ -2537,11 +3222,11 @@ def invitation_confirm(token):
         # Input validation
         if not name or not password or not confirm_password:
             flash('Name, Password, and Confirm Password are required.', 'danger')
-            return render_template('emails/invitation_confirm.html', invitation=invitation, token=token)
+            return render_template('emails/invitation_confirm.html', invitation=invitation, token=token,org=org)
 
         if password != confirm_password:
             flash('Passwords do not match.', 'danger')
-            return render_template('emails/invitation_confirm.html', invitation=invitation, token=token)
+            return render_template('emails/invitation_confirm.html', invitation=invitation, token=token,org=org)
 
         # Check for existing user with this email (though send_invitation should prevent this)
         existing_admin = Admin.query.filter_by(email=invitation.email).first()

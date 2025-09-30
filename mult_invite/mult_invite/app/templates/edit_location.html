@@ -135,7 +135,7 @@
                                 {% for event in location.events %}
                                 <tr>
                                     <td>{{ event.name }}</td>
-                                    <td>{{ event.date.strftime('%Y-%m-%d') if event.date else 'TBD' }}</td>
+                                    <td>{{ event.start_time.strftime('%Y-%m-%d') if event.start_time else 'TBD' }}</td>
                                     <td>
                                         <span class="badge bg-{{ 'success' if event.is_active else 'secondary' }}">
                                             {{ 'Active' if event.is_active else 'Inactive' }}

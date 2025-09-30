@@ -82,14 +82,14 @@
 <body>
     <div class="status-container">
         <h2>{{invitee.organization.slug }}</h2>
-        <h3><span>Invitee Status</span></h3>
+        <h4><span>{{event.name}}</span></h4>
         <p>Dear, {{ invitee.name }}</p>
-        <p>Phone Number: {{ invitee.phone_number }}</p>
+        <p><small>Phone Number: {{ invitee.phone_number }}</small></p>
       
         <p class="message {{ status }}">{{ message }}</p>
 
         <div class="back-button">
-            <a href="{{ url_for('inv.confirm_attendance', org_uuid=org_uuid) }}">Go Back to Home</a>
+            <a href="{{ url_for('inv.confirm_attendance', org_uuid=org_uuid,event_id=event.id) }}">Go Back</a>
         </div>
     </div>
 </body>

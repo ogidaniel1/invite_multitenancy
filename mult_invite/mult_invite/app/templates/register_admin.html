@@ -116,6 +116,20 @@
                                 {% endif %}
                             </div>
 
+                            <!-- hhhhh -->
+                             <div class="form-floating mb-3">
+                                {# Using form.location_id directly handles the select field if defined in WTForms #}
+                                {{ form.location_id(class="form-select", placeholder=form.location_id.label.text, aria_label="Location") }}
+                                <label for="location_id">{{ form.location_id.label }}</label>
+                                {% if form.location_id.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.location_id.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
                             {# --- ADDED PASSWORD FIELDS HERE --- #}
                             <div class="form-floating mb-3">
                                 {{ form.password(class="form-control", placeholder=form.password.label.text) }}

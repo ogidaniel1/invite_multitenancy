@@ -23,7 +23,7 @@
                     {% endif %}
                     {% endwith %}
 
-                   <form method="POST" action="{{ url_for('inv.edit_invitee', org_uuid=org.uuid, id=invitee.id) }}">
+                   <form method="POST" action="{{ url_for('inv.edit_invitee', org_uuid=org.uuid, id=invitee.id,event_id=event.id) }}">
                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                         <div class="form-floating mb-3">
@@ -77,7 +77,7 @@
                             <button type="submit" class="btn btn-success w-100">Save Changes</button>
                         </div>
                         <div class="d-flex justify-content-center mt-2">
-                            <a href="{{ url_for('inv.manage_invitee', org_uuid=org.uuid) }}" class="btn btn-secondary w-100">Cancel</a>
+                            <a href="{{ url_for('inv.manage_invitee', org_uuid=org.uuid,event_id=event.id) }}" class="btn btn-secondary w-100">Cancel</a>
                         </div>
                     </form>
                 </div>

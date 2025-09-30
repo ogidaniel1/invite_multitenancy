@@ -1,0 +1,32 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #f8f9fa; padding: 20px; }
+    .container { background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 3px 8px rgba(0,0,0,0.1); text-align: center; }
+    h2 { color: #2c3e50; margin-bottom: 20px; }
+    img { margin: 20px auto; display: block; max-width: 200px; }
+    p { line-height: 1.6; }
+    a.btn { background: #007bff; color: #fff; padding: 10px 20px; border-radius: 5px; text-decoration: none; display: inline-block; margin-top: 15px; }
+    a.btn:hover { background: #0056b3; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>🎟️ Your Event QR Code</h2>
+    <p>Dear {{ invitee.name }},</p>
+    <p>Thank you for registering with <strong>{{ org.name }}</strong>.</p>
+    <p>Please present the QR code below at the event entrance:</p>
+
+    <img src="data:image/png;base64,{{ qr_base64 }}" alt="QR Code">
+
+    <p>If you can’t scan the QR, <a href="{{ qr_url }}" target="_blank">click here</a> to access it.</p>
+
+    <p>We look forward to welcoming you!</p>
+    <br>
+    <p>Thanks,<br><strong>{{ org.name }} Team</strong></p>
+  </div>
+</body>
+</html>

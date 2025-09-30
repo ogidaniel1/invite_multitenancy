@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Invitees | Admin Dashboard{% endblock %}
+{% block header_title %}Manage Events — {{ org.name }} Invitees{% endblock %}
+
+{% block content %}
+
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Events — {{ org.name|title }}</h3>
+    {% if current_user.is_super_admin or current_user.is_org_admin %}
+
+    <div>
+      <a href="{{ url_for('inv.show_invitees', org_uuid=org.uuid) }}"
+        class="btn btn-outline-secondary btn-sm">Invitees</a>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <form class="row g-2 mb-3" method="get">
+    <div class="col-sm-4">
+      <input type="text" name="search" value="{{ search }}" class="form-control" placeholder="Search event name...">
+    </div>
+    <div class="col-sm-4">
+      <input type="text" name="invitee" value="{{ invitee_search }}" class="form-control"
+        placeholder="Search by invitee name / phone...">
+    </div>
+    <div class="col-sm-2">
+      <select name="date" class="form-select">
+        <option value="all" {% if date_filter=='all' %}selected{% endif %}>All dates</option>
+        <option value="upcoming" {% if date_filter=='upcoming' %}selected{% endif %}>Upcoming</option>
+        <option value="past" {% if date_filter=='past' %}selected{% endif %}>Past</option>
+      </select>
+    </div>
+    <div class="col-sm-2">
+      <button class="btn btn-primary w-100" type="submit">Filter</button>
+    </div>
+  </form>
+
+  <div class="mb-2 text-muted">
+    Showing {{ events|length }} of {{ total_events }} events — total registrations: {{ total_registrations }}
+  </div>
+
+  {% for ev in events %}
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <div>
+        <strong>{{ ev.name }}</strong>
+        <div class="small text-muted">{{ ev.start_time.strftime("%Y-%m-%d %H:%M") }} — {{ ev.location.name if
+          ev.location else 'No location' }}</div>
+      </div>
+      <div class="text-end">
+        <a href="{{ url_for('inv.show_invitee_event', org_uuid=org.uuid, event_id=ev.id) }}"
+          class="btn btn-sm btn-outline-primary">Event detail</a>
+      </div>
+    </div>
+
+    <div class="card-body">
+      {% set s = event_stats.get(ev.id, {}) %}
+      <div class="row">
+        <div class="col-md-3">
+          <div class="h6 mb-0">Registered</div>
+          <div class="fs-4">{{ s.total_registered or 0 }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="h6 mb-0">Present</div>
+          <div class="fs-4">{{ s.total_present or 0 }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="h6 mb-0">RSVP</div>
+          <div>
+            {% for status, cnt in (s.rsvp or {}).items() %}
+            <span class="badge bg-secondary me-1">{{ status }}: {{ cnt }}</span>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="h6 mb-0">Gender</div>
+          <div>
+            {% for g, cnt in (s.gender or {}).items() %}
+            <span class="badge bg-info text-dark me-1">{{ g or 'Unknown' }}: {{ cnt }}</span>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+
+      <!-- small list of top invitees (first 6) -->
+      <hr>
+      <div>
+        <strong>Attendees:</strong>
+
+        {% set invitees = ev.invitee_links.limit(5).all() %}
+        {% set total = ev.invitee_links.count() %}
+
+        {% if invitees %}
+        <!-- Horizontal avatars -->
+        <div class="d-flex align-items-center mt-2">
+          <div class="d-flex">
+            {% for link in invitees %}
+            <img src="{{ link.invitee.profile_image or url_for('static', filename='images/'~ org.logo_url) }}"
+              alt="Attendees image" class="rounded-circle border border-white"
+              style="width:32px; height:32px; object-fit:cover; {% if not loop.first %} margin-left:-12px; {% endif %} z-index: {{loop.revindex}};"
+              title="{{ link.invitee.name }}">
+            {% endfor %}
+          </div>
+          <span class="ms-2 text-muted small">
+            {{ invitees[0].invitee.name }},
+            {% if invitees|length > 1 %}
+            {{ invitees[1].invitee.name }}
+            {% endif %}
+            and {{ total - 2 }} others
+          </span>
+        </div>
+        {% else %}
+        <div class="text-muted small">No invitees yet</div>
+        {% endif %}
+      </div>
+    </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  <!-- pagination -->
+  <nav aria-label="Event pagination">
+    <ul class="pagination">
+      {% if pagination.has_prev %}
+      <li class="page-item"><a class="page-link"
+          href="{{ url_for('inv.show_event_invitees', org_uuid=org.uuid, page=pagination.prev_num, search=search, invitee=invitee_search, date=date_filter) }}">Previous</a>
+      </li>
+      {% else %}
+      <li class="page-item disabled"><span class="page-link">Previous</span></li>
+      {% endif %}
+
+      <li class="page-item disabled"><span class="page-link">Page {{ pagination.page }} of {{ pagination.pages or 1
+          }}</span></li>
+
+      {% if pagination.has_next %}
+      <li class="page-item"><a class="page-link"
+          href="{{ url_for('inv.show_event_invitees', org_uuid=org.uuid, page=pagination.next_num, search=search, invitee=invitee_search, date=date_filter) }}">Next</a>
+      </li>
+      {% else %}
+      <li class="page-item disabled"><span class="page-link">Next</span></li>
+      {% endif %}
+    </ul>
+  </nav>
+</div>
+{% endblock %}

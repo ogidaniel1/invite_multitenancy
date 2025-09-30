@@ -15,7 +15,7 @@
                         <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Default Logo"
                             class="img-fluid" style="max-width: 50px;">
                      {% endif %} 
-                    <h4 class="mt-2">Register New Member</h4>
+                    <h4 class="mt-2">Register</h4>
                 </div>
                 <div class="card-body px-4 py-4">
 
@@ -31,15 +31,16 @@
                     {% endif %}
                     {% endwith %}
 
+                    <div id="prefill-message-box"></div>
                     <form method="POST" action="{{ url_for('inv.register', org_uuid=org.uuid) }}" class="form-horizontal">
                         {{ form.hidden_tag() }}
-                        
-                        {% for field in [form.name, form.gender, form.email, form.phone_number, form.parish, form.area, form.position,form.address, form.state, form.lga] %}
+
+                        {% for field in [form.name, form.gender, form.email, form.phone_number, form.position,form.address, form.state, form.lga] %}
                         <div class="form-floating mb-3">
                             {{ field(class="form-control", placeholder=field.label.text) }}
                             <label for="{{ field.id }}">{{ field.label.text }}</label>
                             {% if field.errors %}
-                                <div class="invalid-feedback">
+                                <div class="text-danger small">
                                     {% for error in field.errors %}
                                         {{ error }}
                                     {% endfor %}
@@ -48,7 +49,22 @@
                         </div>
                         {% endfor %}
 
-                        <button type="submit" class="btn btn-success w-100 mt-3">{{ form.submit.label.text }}</button>
+                        <!-- 🔹 Event dropdown -->
+                    <div class="form-floating mb-3">
+                        <select name="event_id" id="event_id" class="form-control" required>
+                            <option value="">-- Select Upcoming Event --</option>
+                            {% for ev in upcoming_events %}
+                                <option value="{{ ev.id }}"
+                                    {% if ev.id in registered_event_ids %}disabled{% endif %}>
+                                    {{ ev.name }} ({{ ev.start_time.strftime('%Y-%m-%d') }})
+                                    {% if ev.id in registered_event_ids %}- Already Registered{% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <label for="event_id">Upcoming Events</label>
+                    </div>
+
+                         <button type="submit" class="btn btn-success w-100 mt-3">{{ form.submit.label.text }}</button>
                     </form>
                 </div>
                 <div class="card-footer text-center py-2">
@@ -62,6 +78,7 @@
 
 {% block scripts %}
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
 <script>
     $(document).ready(function () {
         $('#state').change(function () {
@@ -110,4 +127,50 @@
         }
     });
 </script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const phoneInput = document.getElementById("phone_number");  // adjust to your WTForms field id
+    const emailInput = document.getElementById("email");
+
+    function lookupInvitee() {
+        const phone = phoneInput.value.trim();
+        const email = emailInput.value.trim();
+        if (!phone && !email) return;
+
+        fetch(`/${"{{ org_uuid }}"}/invitee_lookup?phone=${phone}&email=${email}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.exists) {
+                    // Auto-fill the form
+                    document.getElementById("name").value = data.name || "";
+                    document.getElementById("email").value = data.email || "";
+                    document.getElementById("phone_number").value = data.phone_number || "";
+                    document.getElementById("address").value = data.address || "";
+                    document.getElementById("state").value = data.state || "";
+                    document.getElementById("lga").value = data.lga || "";
+                    document.getElementById("gender").value = data.gender || "";
+                    document.getElementById("position").value = data.position || "";
+
+                    // alert("Existing invitee found. Details auto-filled ✅");
+                    // show inline boostrap alert
+                    const messageBox = document.getElementById("prefill-message-box");
+                    if (messageBox){
+                        messageBox.innerHTML=`
+                        <div class="alert alert-info alert-dismissible fade show" role="alert">
+                           We found your record. Your details have been updated, Please register for event.
+                           <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="close"></button>
+                           </div>`;
+                        }
+                }
+            })
+            .catch(err => console.error("Lookup failed:", err));
+    }
+
+    phoneInput.addEventListener("blur", lookupInvitee);
+    emailInput.addEventListener("blur", lookupInvitee);
+});
+</script>
+
+
 {% endblock %}

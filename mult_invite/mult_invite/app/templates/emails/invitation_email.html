@@ -19,13 +19,13 @@
 <body>
     <div class="email-container">
         <div class="header">
-            <h1>Invitation to Join My App</h1>
+            <h1>Invitation to join {{ organization_name|title }}</h1>
         </div>
         <div class="content">
             <p>Dear {{ invitation.email }},</p>
-            <p>You have been invited to join My App
+            <p>You have been invited to join {{ organization_name|title }}
                 {% if organization_name %}
-                at <strong>{{ organization_name }}</strong>
+                at <strong>{{ organization_name|title}}</strong>
                 {% endif %}
                 as a <strong>{{ role }}</strong>.
             </p>
@@ -38,10 +38,10 @@
             <p>This invitation will expire on {{ invitation.expires_at.strftime('%Y-%m-%d %H:%M UTC') }}.</p>
             <p>If you have any questions, please do not hesitate to contact us.</p>
             <p>Thank you,</p>
-            <p>The My App Team</p>
+            <p>The {{ organization_name|title }} Team</p>
         </div>
         <div class="footer">
-            <p>&copy; {{ now().year }} My App. All rights reserved.</p>
+            <p>&copy; {{ now().year }} {{ organization_name|title }}. All rights reserved.</p>
         </div>
     </div>
 </body>

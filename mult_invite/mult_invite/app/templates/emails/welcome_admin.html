@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Welcome Admin</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #f7f9fc;
+        margin: 0;
+        padding: 0;
+        color: #333;
+      }
+      .container {
+        max-width: 600px;
+        margin: 40px auto;
+        background: #ffffff;
+        border-radius: 8px;
+        padding: 30px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      }
+      h2 {
+        color: #2c3e50;
+        margin-bottom: 20px;
+      }
+      p {
+        line-height: 1.6;
+        margin: 12px 0;
+      }
+      .btn {
+        display: inline-block;
+        margin-top: 20px;
+        padding: 12px 20px;
+        background-color: #007bff;
+        color: #fff !important;
+        text-decoration: none;
+        border-radius: 6px;
+        font-weight: bold;
+        transition: background 0.2s;
+      }
+      .btn:hover {
+        background-color: #0056b3;
+      }
+      .footer {
+        margin-top: 30px;
+        font-size: 12px;
+        color: #777;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Welcome, {{ admin.name }} 🎉</h2>
+      <p>
+        You’ve been added as an <strong>Admin</strong> for
+        <strong>{{ org.name }}</strong>.
+      </p>
+      <p>Click the button below to log in to your dashboard:</p>
+
+      <p style="text-align: center;">
+        <a href="{{ login_url }}" target="_blank" class="btn">Login Now</a>
+      </p>
+
+      <p>This login link will expire in <strong>1 hour</strong> for security.</p>
+
+      <p>We’re excited to have you onboard!</p>
+
+      <div class="footer">
+        Thanks,<br />
+        <strong>The Team</strong>
+      </div>
+    </div>
+  </body>
+</html>

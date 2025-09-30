@@ -160,16 +160,7 @@ def super_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-
-
-# Association table for many to many
-
-event_invitees = db.Table("event_invitees",  
-                 db.Column(db.Integer, db.ForeignKey('event.id'), primary_key=True),
-                 db.Column(db.Integer, db.ForeignKey('invitee.id'), primary_key=True),
-                 )
-
-
+ 
 # Models
 class Admin(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -199,8 +190,13 @@ class Admin(UserMixin, db.Model):
     # This relationship allows you to access the Admin object of the inviter
     invited_by_admin = db.relationship('Admin', remote_side=[id], backref='invited_admins_list')
         
+     #creating relationship between location and admin, location and organization 
     organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True)
+    location_id = db.Column(db.Integer, db.ForeignKey('location.id'), nullable=True)
+
     organization = db.relationship('Organization', backref='admins')
+    location = db.relationship('Location', backref=db.backref('admins', lazy=True))
+    
 
     @property
     def can_export_invitees(self):
@@ -287,9 +283,9 @@ class Invitee(db.Model):
     name = db.Column(db.String(100), nullable=True)
     email = db.Column(db.String(100), nullable=True)
     # for rccg jesus house
-    parish = db.Column(db.String(100))
-    area = db.Column(db.String(100))
-    phone_number = db.Column(db.String(15), unique=True, nullable=False)
+    # parish = db.Column(db.String(100))
+    # area = db.Column(db.String(100))
+    phone_number = db.Column(db.String(15), nullable=False)
     state = db.Column(db.String(100), nullable=True)
     lga = db.Column(db.String(100), nullable=True)
     address = db.Column(db.String(200))
@@ -297,7 +293,6 @@ class Invitee(db.Model):
     position = db.Column(db.String(50), nullable=False)
     register_date = db.Column(db.DateTime, nullable=True)
     deleted = db.Column(db.Boolean, default=False)
-    qr_code_path = db.Column(db.String(200), nullable=True)
     confirmed = db.Column(db.String(20), default='Absent')  # New field to track confirmation
     confirmation_date = db.Column(db.DateTime, nullable=True)  # New field to store confirmation timestamp
     latitude = db.Column(db.Float, nullable=True)  # Corrected the definition
@@ -306,14 +301,17 @@ class Invitee(db.Model):
     organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=False)
     organization = db.relationship('Organization', backref='invitees')
 
+    event_links = db.relationship("EventInvitee", back_populates="invitee", cascade='all, delete-orphan', lazy = "select")
+    @property
+    def events(self):
+        return [link.event for link in self.event_links]
+
 
     def to_dict(self):
         return {
             'id': self.id,
             'name': self.name,
             'email': self.email,
-            'parish': self.parish,
-            'area': self.area,
             'address': self.address,
             'phone_number': self.phone_number,
             'state': self.state,
@@ -322,7 +320,6 @@ class Invitee(db.Model):
             'position': self.position,
             'register_date': self.register_date.isoformat() if self.register_date else None,
             'deleted': self.deleted,
-            'qr_code_path': self.qr_code_path,
             'confirmed': self.confirmed,
             'confirmation_date': self.confirmation_date.isoformat() if self.confirmation_date else None,
             'latitude': self.latitude,
@@ -390,8 +387,14 @@ class Event(db.Model):
     status = db.Column(db.String(50), default='upcoming') # upcoming, active, past
     created_at = db.Column(db.DateTime, default=datetime.now)
 
-    invitees =db.relationship("Invitee", secondary=event_invitees, 
-                            backref=db.backref('events', lazy="dynamics"))
+    # invitees =db.relationship("Invitee", secondary=event_invitees, 
+    #                         backref=db.backref('events', lazy="dynamics"))
+    invitee_links = db.relationship("EventInvitee", back_populates="event",cascade ='all, delete-orphan', lazy="dynamic")
+
+    @property
+    def invitees(self):
+        return [link.invitee for link in self.invitee_links]
+
 
     def to_dict(self):
         return {
@@ -407,7 +410,6 @@ class Event(db.Model):
             'status': self.status,
             'created_at': self.created_at.isoformat()
         }
-
 
 class Invitation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -435,20 +437,23 @@ class Invitation(db.Model):
         self.token = str(uuid.uuid4())
 
 
+class EventInvitee(db.Model):
+    __tablename__ = 'event_invitees'
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), primary_key=True)
+    invitee_id = db.Column(db.Integer, db.ForeignKey('invitee.id'), primary_key=True)
 
-# class EventInvitee(db.Model):
-#     __table__ = 'event_invitees'
-#     id = db.Column(db.Integer, primary_key=True)
-#     longitude = db.Column(db.Float, nullable=True)  # Corrected the definition
-#     event_id = db.Column(db.Integer, db.ForeignKey('event.id'))
+    # extra columns
+    status = db.Column(db.String(20), default="pending")
+    responded_at = db.Column(db.DateTime)
+    confirmed_lat = db.Column(db.Numeric(9,6))
+    confirmed_lng = db.Column(db.Numeric(9,6))
+    attended = db.Column(db.Boolean, default=False)
+    # qrcode stored per invitee - events
+    qr_code_path = db.Column(db.String(200), nullable=True)
 
-#     invitees= db.Column(db.Integer, db.ForeignKey('invitee.id'))
-#     # location_id = db.Column(db.Integer, db.ForeignKey('location.id'))
-#     # location = db.relationship('Location', backref=db.backref('events', lazy=True))
+    event = db.relationship("Event", back_populates="invitee_links")
+    invitee = db.relationship("Invitee", back_populates="event_links")
 
-#     status = db.Column(db.String(50), default ='pending') #"invited", "decline" etc
-    
-    # organization = db.relationship('Organization', backref='invitees')
 
     # event.invitees -> means list of invitees
     # invitee.events -> means list of events they are invited to
@@ -469,6 +474,14 @@ class Feedback(db.Model):
     submit_feedback_date = db.Column(db.DateTime, nullable=True)  # New field to store confirmation timestamp
     organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=False)
     organization = db.relationship('Organization', backref='feedbacks')
+
+    # linking eventInvitee to feedbacks for stats.
+    event_id = db.Column(db.Integer,db.ForeignKey('event.id'), nullable=True)
+    event = db.relationship('Event', backref='feedbacks')
+
+# query on the route like this
+# stats (db.session.query(Event.name, func.count(EventInvitee.invitee_id)).join(EventInvitee, Event.id ==EventInvitee.event_id)
+# .filter(EventInvitee.attended == True).group_by(Event.name).all())
 
 
 class DeleteLog(db.Model):
@@ -508,15 +521,11 @@ ADMIN_ROLES = [('', 'Select Role'), ('Org Admin', 'Org Admin'), ('Normal Admin',
 class InviteeForm(FlaskForm):
     name = StringField('Name', validators=[DataRequired(), Length(min=2, max=100)])
     email = StringField('Email', validators=[DataRequired(), Email(message="Invalid email address")])
-    # for rccg jesus house
-    area = StringField('Area', validators=[DataRequired(), Length(min=2, max=100)])
     address = StringField('Residential Address', validators=[DataRequired()])
+    phone_number = StringField('Phone Number', validators=[DataRequired(message="Phone number is required."), 
+                    Length(min=11, max=15), Regexp(regex=r'^(\+?[1-9]\d{7,14}|0\d{7,14})$', message="Phone number must be valid")])
 
-    parish = StringField('Parish', validators=[DataRequired(), Length(min=2, max=100)])
-  
-    phone_number = StringField('Phone Number', validators=[DataRequired(), 
-                    Length(min=11, max=15), Regexp(regex=r'^\+?\d{11,15}$', message="Phone number must contain only digits")
-]) 
+
     # State SelectField
     state = SelectField('State of Residence', choices=[ ('', 'Select State'),
         ('Abia', 'Abia'), ('Adamawa', 'Adamawa'), ('Akwa Ibom', 'Akwa Ibom'),
@@ -530,9 +539,10 @@ class InviteeForm(FlaskForm):
         ('Oyo', 'Oyo'), ('Plateau', 'Plateau'), ('Rivers', 'Rivers'), ('Sokoto', 'Sokoto'),
         ('Taraba', 'Taraba'), ('Yobe', 'Yobe'), ('Zamfara', 'Zamfara'), ('Fct', 'FCT'), ('Intl', 'Others'),
     ], validators=[DataRequired()])
-     
+
     # LGA SelectField (empty initially, will be populated dynamically)
     lga = SelectField('LGA of Residence', choices=[],  validators=[DataRequired()])
+       
     gender = SelectField('Gender', choices= GENDER_CHOICES, validators=[DataRequired()])
     position = SelectField('Position', choices = POSITION, validators=[DataRequired(), Length(min=2, max=100)])
     submit = SubmitField('Register')
@@ -593,7 +603,12 @@ class AdminForm(FlaskForm):
     email = StringField('Email', validators=[DataRequired(), Email(message="Invalid email address")])
     role = SelectField('Role', choices=[ ('org_admin', 'Organization Admin'),('location_admin', 'Location Admin') # Include location admin
     ], validators=[DataRequired()])
-    phone_number = StringField('Phone Number', validators=[DataRequired(), Length(min=11, max=15), Regexp(regex=r'^\+?\d{11,15}$', message="Phone number must contain only digits")])  
+
+    location_id = SelectField('Assign location',coerce=int, choices=[],validators=[Optional()]) # Include location admin
+
+    phone_number = StringField('Phone Number', validators=[DataRequired(message="Phone number is required."), 
+                    Length(min=11, max=15), Regexp(regex=r'^(\+?[1-9]\d{7,14}|0\d{7,14})$', message="Phone number must be valid")])
+
     address = StringField('Residential Address', validators=[DataRequired(), Length(min=2, max=500)])
     password = PasswordField('Password', validators=[
         DataRequired(),
@@ -610,11 +625,16 @@ class AdminForm(FlaskForm):
 # --- Flask-WTF Form ---
 class AttendanceForm(FlaskForm):
     # csrf_token = HiddenField('CSRF Token')  #  CSRF token field
-    phone_number = StringField('', validators=[
-        DataRequired(message="Phone number is required."),
-        Length(min=11, message="Phone number must be at least 11 digits."),
-        Regexp(r'^\+?\d{11,15}$', message="Phone number must contain only digits.")
-    ])
+    # phone_number = StringField('', validators=[
+    #     DataRequired(message="Phone number is required."),
+    #     Length(min=11, message="Phone number must be at least 11 digits."),
+    #     Regexp(r'^\+?\d{11,15}$', message="Phone number must contain only digits.")
+    # ])
+    
+    phone_number = StringField('Phone Number', validators=[DataRequired(message="Phone number is required."), 
+                    Length(min=11, max=15), Regexp(regex=r'^(\+?[1-9]\d{7,14}|0\d{7,14})$', message="Phone number must be valid")])
+
+
     latitude = HiddenField('Latitude')
     longitude = HiddenField('Longitude')
     submit = SubmitField('Confirm')
@@ -685,4 +705,16 @@ def fetch_lgas_all():
     'Intl': ['Diaspora'],
    
 }
+    
+
+def normalize_phone(phone: str, default_country_code='+234'):
+    phone = phone.strip().replace(" ","")
+    if phone.startswith("0"):
+        # local Nigeria number format -> convert
+        return default_country_code
+    elif not phone.startswith("+"):
+        # no + sign, assume default
+        return default_country_code + phone
+    return phone
+
     

@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -78,6 +79,28 @@
             margin-bottom: 1rem;
         }
 
+        
+        .image-container {
+              width: 80px;
+              height: 80px;
+              overflow: hidden;
+              display: inline-block;
+              border: 1px solid #ddd;
+              border-radius: 50%;
+              background-color: #f9f9f9;
+          }
+  
+          .responsive-image {
+              width: 100%;
+              height: 100%;
+              object-fit: cover;
+              object-position: center;
+          }
+  
+          .btn {
+              margin: 2px;
+          }
+
         .form-label{
             display: block;
             margin-bottom: 0.5rem;
@@ -87,6 +110,7 @@
 
     </style>
 </head>
+
 <body>
 
     <div class="form-container">
@@ -98,10 +122,20 @@
                 {% endif %}
                 {% endwith %}
                         
-            <h2>{{ org.slug }}</h2>
-            <h3>Confirm Attendance</h3>
+               <h2>
+                <!-- <img src="{{ url_for('static', filename='images/' ~ org.logo_url) }}" alt="{{ org.name }} Logo"
+                    class="profile-image-container" style="max-width: 150px;"> 
+               <i class="bi bi-person-circle text-primary" ></i> -->
+             <div class="image-container">
+               <img src="{{ url_for('static', filename='images/' ~ (org.logo_url or 'image_2.jpg')) }}" 
+                       alt="{{org.slug }} Image" 
+                       class="responsive-image">
+                </h2>
+            
+            <h3><span>{{event.name}}</span></h3>
+            <h4>Confirm Attendance</h4>
 
-       <form method="POST" action="{{ url_for('inv.confirm_attendance',org_uuid=org_uuid) }}" onsubmit="return attachLocation();">
+       <form method="POST" action="{{ url_for('inv.confirm_attendance',org_uuid=org_uuid, event_id=event.id) }}" onsubmit="return attachLocation();">
             {{ form.hidden_tag() }}
             <div class="mb-3">
                 {{ form.phone_number.label(class="form-label") }}
@@ -114,6 +148,7 @@
             {{ form.latitude(id="latitude") }} {# Hidden field for latitude #}
             {{ form.longitude(id="longitude") }} {# Hidden field for longitude #}
             <button type="submit">Confirm</button>
+            <p><small><i>Please,Ensure your device location is turn on</i></small></p>
         </form>
     </div>
 

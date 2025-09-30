@@ -16,7 +16,7 @@ from werkzeug.security import generate_password_hash
 
 # Assuming you have these models - adjust imports based on your project structure
 # from app import db, Admin, Organization, Location, Invitation
-from config import send_invitation_email,send_admin_invite_email # Assuming you have email utilities
+from app.inv.tokens import send_invitation_email,send_admin_invite_email # Assuming you have email utilities
 
 
 admin_bp = Blueprint('admin', __name__, template_folder='../templates')
@@ -163,7 +163,42 @@ def get_locations():
     try:
         query = Location.query.join(Organization)
         # ... (existing filtering logic) ...
-        locations = Location.query.order_by(Location.created_at.desc()).limit(20).all()
+        # Filters
+        org_id = request.args.get('organization_id')
+        location = request.args.get('location')  # Volunteer, Guest, Attendee
+        status = request.args.get('status')  # Present, Absent, Confirmed
+        search = request.args.get('search')
+
+        if org_id:
+            
+            try:
+                org_id_int= int(org_id)
+                query = query.filter(Location.organization_id == org_id_int)
+                current_app.logger.info(f"here we check invalid org id:  {org_id_int}")
+            
+            except ValueError:
+                current_app.logger.warning(f"Invalid org_id passed:  {org_id}")
+        
+        if location:
+            query = query.filter(Location.name == location)
+        
+
+        if status == 'active':
+            query = query.filter(Location.is_active == True)
+        elif status == 'inactive':
+            query = query.filter(Location.is_active == False)
+
+        if search:
+            search_term = f'%{search}%'
+            query = query.filter(
+                or_(
+                    Location.name.ilike(search_term),
+                    Location.address.ilike(search_term)
+                )
+            )
+
+        locations = query.order_by(Location.created_at.desc()).limit(20).all()
+        
         return jsonify([{
             'id': loc.id,
             'name': loc.name,
@@ -179,6 +214,7 @@ def get_locations():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     
+
 
 # NEW: Create Location
 @admin_bp.route('/api/admin/locations', methods=['POST'])
@@ -372,8 +408,8 @@ def get_administrators():
     """Get all administrators with filtering"""
     # ... (existing get_administrators logic) ...
     try:
-        query = Admin.query.filter(Admin.role.in_(['super_admin', 'org_admin', 'location_admin']))
-        
+        #'super_admin' removing super admin
+        query = Admin.query.filter(Admin.role.in_(['org_admin', 'location_admin']))        
         # Apply filters
         org_id = request.args.get('organization_id')
         role = request.args.get('role')
@@ -381,8 +417,13 @@ def get_administrators():
         search = request.args.get('search')
         
         if org_id:
-            query = query.filter(Admin.organization_id == org_id)
-        
+            try:
+                org_id_int= int(org_id)
+                query = query.filter(Admin.organization_id == org_id_int)
+                current_app.logger.info(f"here we check invalid org id:  {org_id_int}")
+            except ValueError:
+                current_app.logger.warning(f"Invalid org_id passed:  {org_id}")
+
         if role:
             query = query.filter(Admin.role == role)
         
@@ -400,7 +441,7 @@ def get_administrators():
                 )
             )
 
-        admins = Admin.query.order_by(Admin.created_at.desc()).limit(20).all()
+        admins = query.order_by(Admin.created_at.desc()).limit(20).all()
         return jsonify([{
             'id': admin.id,
             'name': admin.name,
@@ -683,8 +724,44 @@ def get_invitations():
         ).join(
             Admin, Invitation.invited_by_id == Admin.id, isouter=True
         )
+
+        org_id = request.args.get('organization_id')
+        status = request.args.get('status')
+        inviter = request.args.get('invited_by_id')
+        search = request.args.get('search')
+        
+        if org_id:
+            
+            try:
+                org_id_int= int(org_id)
+                query = query.filter(Invitation.organization_id == org_id_int)
+                current_app.logger.info(f"here we check invalid org id:  {org_id_int}")
+            except ValueError:
+                current_app.logger.warning(f"Invalid org_id passed:  {org_id}")
+
+
+        if status in ['Accepted', 'Pending', 'Expired']:
+            query = query.filter(Invitation.status == status)
+
+
+        if inviter:
+            try:
+                inviter_int= int(inviter)
+                query = query.filter(Invitation.invited_by_id == inviter_int)
+                current_app.logger.info(f"here we check invalid invited_by_id id:  {inviter_int}")
+            
+            except ValueError:
+                current_app.logger.warning(f"Invalid invited_by_id passed:  {inviter}")
+        
+        if search:
+            search_term = f'%{search}%'
+            query = query.filter(
+                or_(
+                    Invitation.email.ilike(search_term)
+                )
+            ) 
         # ... (existing filtering logic) ...
-        invitations = Invitation.query.order_by(Invitation.created_at.desc()).limit(20).all()
+        invitations = query.order_by(Invitation.created_at.desc()).limit(20).all()
         
         return jsonify([{
             'id': inv.id,
@@ -1103,23 +1180,34 @@ def get_inviters():
 @login_required
 @super_admin_required
 def get_invitee():
-
+    # from models import EventInvitee,Event
     """
     API: Get all invitees with optional filtering for super admins
     """ 
     try:
-        query = Invitee.query.filter(Invitee.confirmed.in_(['Absent', 'Present', 'Confirmed']))
 
-        # Filters
+        query = Invitee.query.filter(Invitee.confirmed.in_(['Absent', 'Present', 'Confirmed']))
+        
+         # Filters
         org_id = request.args.get('organization_id')
         position = request.args.get('position')  # Volunteer, Guest, Attendee
         confirmed = request.args.get('confirmed')  # Present, Absent, Confirmed
         search = request.args.get('search')
-
+        
+      
+        # if org_id:
+        # query = query.filter(Invitee.organization_id == org_id)
+        
         if org_id:
-            query = query.filter(Invitee.organization_id == org_id)
+            
+            try:
+                org_id_int= int(org_id)
+                query = query.filter(Invitee.organization_id == org_id_int)
+                current_app.logger.info(f"here we check invalid org id:  {org_id_int}")
+            except ValueError:
+                current_app.logger.warning(f"Invalid org_id passed:  {org_id}")
 
-        if confirmed:
+        if confirmed in ['Absent', 'Present','Confirmed']:
             query = query.filter(Invitee.confirmed == confirmed)
 
         if position in ['Volunteer', 'Guest', 'Attendee']:
@@ -1130,11 +1218,12 @@ def get_invitee():
             query = query.filter(
                 or_(
                     Invitee.name.ilike(search_term),
-                    Invitee.email.ilike(search_term)
+                    Invitee.email.ilike(search_term),
+                    Invitee.phone_number.ilike(search_term)
                 )
-            )
+            ) 
 
-        invitees = Invitee.query.order_by(Invitee.confirmation_date.desc()).limit(20).all()
+        invitees = query.order_by(Invitee.confirmation_date.desc()).limit(50).all()
 
         return jsonify([
             {
@@ -1146,7 +1235,7 @@ def get_invitee():
                 'phone_number': i.phone_number,
                 'organization': {
                 'id': i.organization.id,
-                'name': i.organization.name
+                'name': i.organization.name.title()
                 } if i.organization else None,
                 'created_at': i.register_date.isoformat() if hasattr(i, 'register_date') and i.register_date else None
             } for i in invitees
@@ -1445,11 +1534,24 @@ def get_events():
         search = request.args.get('search')
         date_filter = request.args.get('date_filter') # e.g., 'today', 'week', 'month'
 
+        # if org_id:
+        #     query = query.filter(Event.organization_id == org_id)
+
         if org_id:
-            query = query.filter(Event.organization_id == org_id)
+            try:
+                org_id_int= int(org_id)
+                query = query.filter(Event.organization_id == org_id_int)
+                current_app.logger.info(f"here we check invalid org id:  {org_id_int}")
+            except ValueError:
+                current_app.logger.warning(f"Invalid org_id passed:  {org_id}")
+
 
         if location_id:
-            query = query.filter(Event.location_id == location_id)
+            try:
+                location_id_int =int(location_id)
+                query = query.filter(Event.location_id == location_id_int) 
+            except ValueError:
+                current_app.logger.warning(f"Invalid location_id passed:  {location_id}")
         
         if status:
             # You'll need to define how 'status' is determined in your Event model
@@ -1486,7 +1588,7 @@ def get_events():
                 query = query.filter(Event.start_time >= start_date)
             # You might need to add logic for `end_date` if you want to filter events ending within a period
 
-        events = Event.query.order_by(Event.created_at.desc()).limit(20).all()
+        events = query.order_by(Event.created_at.desc()).limit(20).all()
 
         return jsonify([{
             'id': event.id,

@@ -217,8 +217,10 @@
                         <label for="adminOrgFilter" class="form-label">Organization</label>
                         <select class="form-select" id="adminOrgFilter">
                             <option value="">All Organizations</option>
+
                         </select>
                     </div>
+
                     <div class="col-md-2">
                         <label for="adminRoleFilter" class="form-label">Role</label>
                         <select class="form-select" id="adminRoleFilter">
@@ -302,7 +304,7 @@
             <div class="filter-section">
                 <div class="row g-3">
                     <div class="col-md-3">
-                        <label for="pendingInvitationSearch" class="form-label">Search Invitees</label>
+                        <label for="pendingInvitationSearch" class="form-label">Search Inviters</label>
                         <input type="text" class="form-control" id="pendingInvitationSearch" placeholder="Search by email...">
                     </div>
                     <div class="col-md-2">
@@ -499,6 +501,7 @@
                         <label for="eventLocationFilter" class="form-label">Location</label>
                         <select class="form-select" id="eventLocationFilter">
                             <option value="">All Locations</option>
+                            
                         </select>
                     </div>
                     <div class="col-md-2">
@@ -859,6 +862,7 @@
             invitations = await response.json();
             console.log("invitations", invitations)
             filteredData.invitations = [...invitations]; // Initialize filtered data
+            populatePendingInvitationFilters();
 
         } catch (error) {
             console.error("Error loading invitations:", error);
@@ -947,7 +951,6 @@
         // Filter listeners for Invitations (ensure your HTML filter elements have these IDs)
         // document.getElementById('pendingInvitationSearch').addEventListener('keyup', applyPendingInvitationFilters); // Assuming you have this search input
         // document.getElementById('eventSearch').addEventListener('keyup', applyEventFilters); // Assuming you have this search input
-
 
 
         // Filter listeners for Invitations (ensure your HTML filter elements have these IDs)
@@ -1326,7 +1329,7 @@
         filteredData.locations = locations.filter(location => {
             const matchesSearch = location.name.toLowerCase().includes(searchTerm) ||
                                   location.address.toLowerCase().includes(searchTerm);
-            const matchesOrg = orgFilter === '' || location.organization_id === orgFilter;
+            const matchesOrg = orgFilter === '' || location.organization.id === parseInt(orgFilter,10);
             const matchesStatus = statusFilter === '' || String(location.is_active) === statusFilter;
 
             let matchesDate = true;
@@ -1368,7 +1371,7 @@
         filteredData.admins = admins.filter(admin => {
             const matchesSearch = (admin.name && admin.name.toLowerCase().includes(searchTerm)) ||
                                   (admin.email && admin.email.toLowerCase().includes(searchTerm));
-            const matchesOrg = orgFilter === '' || admin.organization_id === orgFilter;
+            const matchesOrg = orgFilter === '' || admin.organization.id === parseInt(orgFilter,10);
             const matchesRole = roleFilter === '' || admin.role === roleFilter;
             const matchesStatus = statusFilter === '' || String(admin.is_active) === statusFilter;
             return matchesSearch && matchesOrg && matchesRole && matchesStatus;
@@ -1393,9 +1396,9 @@
 
         filteredData.invitations = invitations.filter(invite => {
             const matchesSearch = invite.email.toLowerCase().includes(searchTerm);
-            const matchesOrg = orgFilter === '' || invite.organization_id === orgFilter;
+            const matchesOrg = orgFilter === '' || invite.organization.id === parseInt(orgFilter,10);
             const matchesStatus = statusFilter === '' || invite.status === statusFilter;
-            const matchesInviter = inviterFilter === '' || invite.invited_by_id === inviterFilter;
+            const matchesInviter = inviterFilter === '' || String(invite.invited_by.id) === inviterFilter;
             return matchesSearch && matchesOrg && matchesStatus && matchesInviter;
         });
         renderPendingInvitationTable(); // Calls the renamed render function
@@ -1419,9 +1422,9 @@
         filteredData.managedInvitees = managedInviteesData.filter(invitee => {
             const matchesSearch = (invitee.name && invitee.name.toLowerCase().includes(searchTerm)) ||
                                   (invitee.email && invitee.email.toLowerCase().includes(searchTerm));
-            const matchesOrg = orgFilter === '' || invitee.organization_id === orgFilter;
+            const matchesOrg = orgFilter === '' || invitee.organization.id === parseInt(orgFilter,10);
             const matchesPosition = positionFilter === '' || invitee.position === positionFilter;
-            const matchesStatus = statusFilter === '' || invitee.status === statusFilter;
+            const matchesStatus = statusFilter === '' || invitee.confirmed === statusFilter;
             return matchesSearch && matchesOrg && matchesPosition && matchesStatus;
         });
 
@@ -1445,8 +1448,8 @@
 
         filteredData.events = events.filter(event => {
             const matchesSearch = event.name.toLowerCase().includes(searchTerm);
-            const matchesOrg = orgFilter === '' || event.organization_id === orgFilter;
-            const matchesLocation = locationFilter === '' || event.location_id === locationFilter;
+            const matchesOrg = orgFilter === '' || event.organization.id === parseInt(orgFilter,10);
+            const matchesLocation = locationFilter === '' || String(event.location.id) === locationFilter;
             
             let matchesStatus = true;
             if (statusFilter !== '') {
@@ -2465,6 +2468,32 @@ function bulkToggleEventStatus(isActive) {
         locationFilter.value = currentSelected;
     }
 
+ 
+    function populatePendingInvitationFilters() {
+    const PendingInvitationFilter = document.getElementById('pendingInvitationInviterFilter');
+    const currentSelected = PendingInvitationFilter.value;
+    PendingInvitationFilter.innerHTML = '<option value="">All Inviters</option>';
+
+    // Use a Set to keep track of unique inviter IDs
+    const seenInviters = new Set();
+
+    invitations.forEach(inv => {
+        if (inv.invited_by && !seenInviters.has(inv.invited_by.id)) {
+            seenInviters.add(inv.invited_by.id);
+
+            const option = document.createElement('option');
+            option.value = inv.invited_by.id;
+            option.textContent = inv.invited_by.name || inv.invited_by.email;
+            PendingInvitationFilter.appendChild(option);
+        }
+    });
+
+    PendingInvitationFilter.value = currentSelected; // keep previous selection if any
+    }
+
+
+
+    
     // --- Modals for Add/Edit ---
     function showModal(modalContent, modalId) {
         const modalsContainer = document.getElementById('modalsContainer');

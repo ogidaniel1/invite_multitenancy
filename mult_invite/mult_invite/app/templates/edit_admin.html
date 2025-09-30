@@ -33,11 +33,25 @@
                         </div>
 
                         <div class="form-floating mb-3">
+                            <input type="text" class="form-control" id="phone_number" name="phone_number" value="{{ admin.phone_number }}" required>
+                            <label for="phone_number">Phone number</label>
+                        </div>
+
+                        <div class="form-floating mb-3">
                             <input type="text" class="form-control" id="email" name="email" value="{{ admin.email }}" required>
                             <label for="email">Email</label>
                         </div>
+                        
+                        <div class="form-floating mb-3">
+                        <select class="form-select" id="gender" name="gender" required>
+                            <label for="gender">Gender</label>
+                            <option value="Male" {% if admin.gender == 'Male' %}selected{% endif %}>Male</option>
+                            <option value="Female" {% if admin.gender == 'Female' %}selected{% endif %}>Female</option>
+                        </select>
+                        <label for="gender">Gender</label>
+                    </div>
 
-                    <div class="form-floating mb-3">
+                        <div class="form-floating mb-3">
                         <select class="form-select" id="role" name="role" required>
                             <label for="role">Role</label>
                             <option value="location_admin" {% if admin.role == 'location_admin' %}selected{% endif %}>Location Admin</option>
@@ -46,8 +60,24 @@
                         <label for="position">Position</label>
                     </div>
 
+                     {% if admin.role == 'location_admin' %}
                         <div class="form-floating mb-3">
-                            <input type="password" class="form-control" id="password" name="password" value="{{ admin.password }}" required>
+                       <select id="location_id" name="location_id" class="form-select">
+                        <label for="location_id">Assign location</label>
+                           <option value="">-- Select Location --</option>
+                            {% for loc in org_locations %}
+                            <option value="{{ loc.id }}" {% if admin.location_id == loc.id %}selected{% endif %}>
+                                {{ loc.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <label for="location">Location</label>
+
+                        </div>
+                        {% endif %}
+
+                        <div class="form-floating mb-3">
+                            <input type="password" class="form-control" id="password" name="password" value="{{ admin.password }}">
                             <label for="password">Enter new Password</label>
                         </div>
 

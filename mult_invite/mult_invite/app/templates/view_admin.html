@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Invitees | Admin Dashboard{% endblock %}
+{% block header_title %}Preview Admin— {{ org.name }} {% endblock %}
+
+{% block content %}
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-info text-white text-center py-3">
+                    <h4 class="mt-2">
+                        <i class="bi bi-person-circle me-2"></i>
+                        Admin Details Preview
+                    </h4>
+                </div>
+                <div class="card-body px-4 py-4">
+
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                    {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+                    {% endwith %}
+
+                    <!-- Admin Profile Image -->
+                    <div class="text-center mb-4">
+                        <div class="profile-image-container">
+                            <i class="bi bi-person-circle text-primary" style="font-size: 5rem;"></i>
+                        </div>
+                    </div>
+
+                    <!-- Admin Details Preview -->
+                    <div class="admin-details">
+                        <div class="detail-item mb-3 p-3 bg-light rounded">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-person-fill text-primary me-3" style="font-size: 1.2rem;"></i>
+                                <div>
+                                    <label class="form-label fw-bold mb-1 text-muted">Name</label>
+                                    <div class="detail-value">{{ admin.name }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="detail-item mb-3 p-3 bg-light rounded">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-envelope-fill text-primary me-3" style="font-size: 1.2rem;"></i>
+                                <div>
+                                    <label class="form-label fw-bold mb-1 text-muted">Email</label>
+                                    <div class="detail-value">{{ admin.email }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="detail-item mb-3 p-3 bg-light rounded">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-shield-check text-primary me-3" style="font-size: 1.2rem;"></i>
+                                <div>
+                                    <label class="form-label fw-bold mb-1 text-muted">Role</label>
+                                    <div class="detail-value">
+                                        {% if admin.role == 'location_admin' %}
+                                            <span class="badge bg-success">Location Admin</span>
+                                        {% elif admin.role == 'org_admin' %}
+                                            <span class="badge bg-primary">Organization Admin</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ admin.role }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="detail-item mb-3 p-3 bg-light rounded">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-geo-alt-fill text-primary me-3" style="font-size: 1.2rem;"></i>
+                                <div>
+                                    <label class="form-label fw-bold mb-1 text-muted">Assigned location</label>
+                                    <div class="detail-value">
+                                        {% if admin.role == 'location_admin' %}
+                                      {% if admin.location %}
+                                            <span class="badge bg-primary">{{ admin.location.name }}</span>
+                                         {% else %}
+                                            <span class="text-muted"> No location Assigned </span>
+                                      {% endif %}
+                                      <p>
+                                      <p><small><i>last Updated: {{admin.updated_at.strftime("%Y-%m-%d %H:%M")  if admin.updated_at else "N/A" }}</i></small></p>
+                                      </p>
+                                      {% endif %}
+                                    </div>
+                                 </div>
+                            </div>
+                        </div>
+
+                        <div class="detail-item mb-3 p-3 bg-light rounded">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-key-fill text-primary me-3" style="font-size: 1.2rem;"></i>
+                                <div>
+                                    <label class="form-label fw-bold mb-1 text-muted">Password</label>
+                                    <div class="detail-value text-muted">
+                                        <i class="bi bi-lock-fill me-1"></i>
+                                        ••••••••••
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="d-flex justify-content-center gap-2 mt-4">
+                       
+                        <a href="{{ url_for('inv.show_event_invitees', org_uuid=org.uuid) }}" class="btn btn-secondary">
+                            <i class="bi bi-arrow-left me-2"></i>
+                            Back to Event
+                        </a>
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.detail-item {
+    transition: all 0.3s ease;
+    border-left: 4px solid transparent;
+}
+
+.detail-item:hover {
+    border-left-color: #0d6efd;
+    background-color: #f8f9fa !important;
+}
+
+.detail-value {
+    font-size: 1.1rem;
+    color: #333;
+    font-weight: 500;
+}
+
+.profile-image-container {
+    position: relative;
+    display: inline-block;
+}
+
+.admin-details {
+    max-width: 100%;
+}
+
+@media (max-width: 576px) {
+    .detail-item {
+        padding: 1rem !important;
+    }
+    
+    .detail-item .d-flex {
+        flex-direction: column;
+        align-items: flex-start !important;
+    }
+    
+    .detail-item i {
+        margin-bottom: 0.5rem;
+        margin-right: 0 !important;
+    }
+}
+</style>
+
+    {% endblock %}

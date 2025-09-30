@@ -8,7 +8,7 @@
         <div class="col-12">
             <div class="card shadow">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h3 class="card-title mb-0">{{ org.name }}: Events</h3>
+                    <h3 class="card-title mb-0">{{ org.name|title }}: Events</h3>
                     <a href="{{ url_for('inv.add_event', org_uuid=org.uuid) }}" class="btn btn-primary">
                         <i class="fas fa-plus me-1"></i>Add New Event
                     </a>
@@ -123,7 +123,7 @@
                             <ul class="pagination justify-content-center">
                                 {% if events.has_prev %}
                                     <li class="page-item">
-                                        <a class="page-link" href="{{ url_for('inv.view_event', org_uuid=org.uuid, page=events.prev_num) }}">
+                                        <a class="page-link" href="{{ url_for('inv.view_event_detail', org_uuid=org.uuid, page=events.prev_num) }}">
                                             <i class="fas fa-chevron-left"></i> Previous
                                         </a>
                                     </li>
@@ -133,7 +133,7 @@
                                     {% if page_num %}
                                         {% if page_num != events.page %}
                                             <li class="page-item">
-                                                <a class="page-link" href="{{ url_for('inv.view_event', org_uuid=org.uuid, page=page_num) }}">{{ page_num }}</a>
+                                                <a class="page-link" href="{{ url_for('inv.view_event_detail', org_uuid=org.uuid, page=page_num) }}">{{ page_num }}</a>
                                             </li>
                                         {% else %}
                                             <li class="page-item active">
