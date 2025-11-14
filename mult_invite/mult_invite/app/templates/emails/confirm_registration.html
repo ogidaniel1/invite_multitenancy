@@ -18,7 +18,7 @@
     <p>Location: {{ event.location.name if event.location else "To be announced" }}</p>
     <p>We look forward to seeing you!</p>
     <br>
-    <p>Thank you,<br><strong>{{ org.name }} Team</strong></p>
+    <p>Thank you,<br><strong>{{ org.name|upper }} Team</strong></p>
   </div>
 </body>
 </html>

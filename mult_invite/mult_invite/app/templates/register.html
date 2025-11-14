@@ -1,78 +1,88 @@
 {% extends "base.html" %}
 
-{% block title %}Register Member{% endblock %}
+{% block title %}Event Registration | {{ org.name }}{% endblock %}
 
 {% block content %}
-<div class="container my-5">
-    <div class="row justify-content-center">
-        <div class="col-md-8 col-lg-6">
-            <div class="card shadow-sm">
-                <div class="card-header bg-primary text-white text-center py-3">
-                     {% if org.logo_url %}
-                        <img src="{{ url_for('static', filename='images/' + org.logo_url) }}" alt="{{ org.name }} Logo"
-                            class="img-fluid" style="max-width: 50px;">
-                        {% else %}
-                        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Default Logo"
-                            class="img-fluid" style="max-width: 50px;">
-                     {% endif %} 
-                    <h4 class="mt-2">Register</h4>
-                </div>
-                <div class="card-body px-4 py-4">
-
-                    <!-- flash message -->
-                    {% with messages = get_flashed_messages(with_categories=true) %}
-                    {% if messages %}
-                    {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                    {% endfor %}
-                    {% endif %}
-                    {% endwith %}
-
-                    <div id="prefill-message-box"></div>
-                    <form method="POST" action="{{ url_for('inv.register', org_uuid=org.uuid) }}" class="form-horizontal">
-                        {{ form.hidden_tag() }}
-
-                        {% for field in [form.name, form.gender, form.email, form.phone_number, form.position,form.address, form.state, form.lga] %}
-                        <div class="form-floating mb-3">
-                            {{ field(class="form-control", placeholder=field.label.text) }}
-                            <label for="{{ field.id }}">{{ field.label.text }}</label>
-                            {% if field.errors %}
-                                <div class="text-danger small">
-                                    {% for error in field.errors %}
-                                        {{ error }}
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-                        </div>
-                        {% endfor %}
-
-                        <!-- 🔹 Event dropdown -->
-                    <div class="form-floating mb-3">
-                        <select name="event_id" id="event_id" class="form-control" required>
-                            <option value="">-- Select Upcoming Event --</option>
-                            {% for ev in upcoming_events %}
-                                <option value="{{ ev.id }}"
-                                    {% if ev.id in registered_event_ids %}disabled{% endif %}>
-                                    {{ ev.name }} ({{ ev.start_time.strftime('%Y-%m-%d') }})
-                                    {% if ev.id in registered_event_ids %}- Already Registered{% endif %}
-                                </option>
-                            {% endfor %}
-                        </select>
-                        <label for="event_id">Upcoming Events</label>
-                    </div>
-
-                         <button type="submit" class="btn btn-success w-100 mt-3">{{ form.submit.label.text }}</button>
-                    </form>
-                </div>
-                <div class="card-footer text-center py-2">
-                    <small>Powered by <a href="https://x.com/danwebit" target="_blank" rel="noopener noreferrer">DanwebIT</a></small>
-                </div>
-            </div>
+<div class="container my-4">
+  <div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+      <div class="card shadow border-0 rounded-4">
+        <div class="card-header bg-gradient bg-primary text-white text-center py-4">
+          {% if org.logo_url %}
+          <img src="{{ url_for('static', filename='images/' + org.logo_url) }}" alt="{{ org.name }} Logo"
+            class="img-fluid rounded-4 mb-2" style="max-width: 70px;">
+          {% else %}
+          <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Default Logo"
+            class="img-fluid rounded-4 mb-2" style="max-width: 70px;">
+          {% endif %}
+          <h4 class="fw-semibold">Event Registration</h4>
+          <p class="mb-0 small">Join {{ org.name|upper }} upcoming events seamlessly</p>
         </div>
+
+        <div class="card-body p-4">
+          <!-- Flash Messages -->
+          {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+          {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+          {% endfor %}
+          {% endif %}
+          {% endwith %}
+
+          <div id="prefill-message-box"></div>
+
+          <form method="POST" action="{{ url_for('inv.register', org_uuid=org.uuid) }}">
+            {{ form.hidden_tag() }}
+
+            {% for field in [form.name, form.gender, form.email, form.phone_number, form.position, form.address, form.state, form.lga] %}
+            <div class="form-floating mb-3">
+              {{ field(class="form-control", placeholder=field.label.text) }}
+              <label for="{{ field.id }}">{{ field.label.text }}</label>
+              {% if field.errors %}
+              <div class="text-danger small mt-1">
+                {% for error in field.errors %}
+                {{ error }}
+                {% endfor %}
+              </div>
+              {% endif %}
+            </div>
+            {% endfor %}
+
+            <!-- Event Dropdown -->
+            <div class="form-floating mb-4">
+              <select name="event_id" id="event_id" class="form-select" required>
+                <option value="">-- Select Upcoming Event --</option>
+                {% for ev in upcoming_events %}
+                <option value="{{ ev.id }}"
+                  {% if ev.id in registered_event_ids %}disabled{% endif %}>
+                  {{ ev.name }} ({{ ev.start_time.strftime('%Y-%m-%d') }})
+                  {% if ev.id in registered_event_ids %}- Already Registered{% endif %}
+                </option>
+                {% endfor %}
+              </select>
+              <label for="event_id">Upcoming Events</label>
+            </div>
+
+            <button type="submit" class="btn btn-success w-100 py-2">
+              <i class="bi bi-person-plus-fill me-1"></i> Register
+            </button>
+          </form>
+        </div>
+
+        <div class="card-footer text-center py-3 bg-light border-0">
+          <small class="text-muted">
+            Sponsored by
+            <a href="#" target="_blank" rel="noopener noreferrer" class="text-decoration-none fw-semibold">
+              {{ org.name|upper }}
+            </a>
+          </small>
+        </div>
+      </div>
     </div>
+  </div>
 </div>
 {% endblock %}
 
@@ -80,97 +90,87 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 <script>
-    $(document).ready(function () {
-        $('#state').change(function () {
-            var selectedState = $(this).val();
-            if (selectedState) {
-                $.ajax({
-                    url: "{{ url_for('inv.get_lgas') }}",
-                    type: 'GET',
-                    data: { state: selectedState },
-                    success: function (response) {
-                        var lgaSelect = $('#lga');
-                        lgaSelect.empty();
-                        lgaSelect.append($('<option>', {
-                            value: '',
-                            text: 'Select LGA',
-                            disabled: true,
-                            selected: true
-                        }));
-                        $.each(response.lga, function (index, lga) {
-                            lgaSelect.append($('<option>', {
-                                value: lga,
-                                text: lga
-                            }));
-                        });
-                        lgaSelect.prop('disabled', false);
-                    },
-                    error: function () {
-                        alert('Error loading LGAs.');
-                    }
-                });
-            } else {
-                $('#lga').empty().append($('<option>', {
-                    value: '',
-                    text: 'Select LGA',
-                    disabled: true,
-                    selected: true
-                })).prop('disabled', true);
-            }
-        });
+  // Dynamically load LGAs by state
+  $(document).ready(function () {
+    $('#state').change(function () {
+      var selectedState = $(this).val();
+      var lgaSelect = $('#lga');
 
-        // Initialize the LGA dropdown on page load
-        if ($('#state').val()) {
-            $('#state').trigger('change');
-        } else {
-            $('#lga').prop('disabled', true);
-        }
+      if (selectedState) {
+        $.ajax({
+          url: "{{ url_for('inv.get_lgas') }}",
+          type: 'GET',
+          data: { state: selectedState },
+          success: function (response) {
+            lgaSelect.empty().append($('<option>', {
+              value: '',
+              text: 'Select LGA',
+              disabled: true,
+              selected: true
+            }));
+            $.each(response.lga, function (index, lga) {
+              lgaSelect.append($('<option>', { value: lga, text: lga }));
+            });
+            lgaSelect.prop('disabled', false);
+          },
+          error: function () {
+            alert('Error loading LGAs.');
+          }
+        });
+      } else {
+        lgaSelect.empty().append($('<option>', {
+          value: '',
+          text: 'Select LGA',
+          disabled: true,
+          selected: true
+        })).prop('disabled', true);
+      }
     });
+
+    // Initialize on load
+    if ($('#state').val()) $('#state').trigger('change');
+  });
 </script>
 
 <script>
-document.addEventListener("DOMContentLoaded", function () {
-    const phoneInput = document.getElementById("phone_number");  // adjust to your WTForms field id
+  // Auto-prefill existing invitees by phone/email
+  document.addEventListener("DOMContentLoaded", function () {
+    const phoneInput = document.getElementById("phone_number");
     const emailInput = document.getElementById("email");
 
     function lookupInvitee() {
-        const phone = phoneInput.value.trim();
-        const email = emailInput.value.trim();
-        if (!phone && !email) return;
+      const phone = phoneInput.value.trim();
+      const email = emailInput.value.trim();
+      if (!phone && !email) return;
 
-        fetch(`/${"{{ org_uuid }}"}/invitee_lookup?phone=${phone}&email=${email}`)
-            .then(res => res.json())
-            .then(data => {
-                if (data.exists) {
-                    // Auto-fill the form
-                    document.getElementById("name").value = data.name || "";
-                    document.getElementById("email").value = data.email || "";
-                    document.getElementById("phone_number").value = data.phone_number || "";
-                    document.getElementById("address").value = data.address || "";
-                    document.getElementById("state").value = data.state || "";
-                    document.getElementById("lga").value = data.lga || "";
-                    document.getElementById("gender").value = data.gender || "";
-                    document.getElementById("position").value = data.position || "";
+      fetch(`/${"{{ org_uuid }}"}/invitee_lookup?phone=${phone}&email=${email}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.exists) {
+            document.getElementById("name").value = data.name || "";
+            document.getElementById("email").value = data.email || "";
+            document.getElementById("phone_number").value = data.phone_number || "";
+            document.getElementById("address").value = data.address || "";
+            document.getElementById("state").value = data.state || "";
+            document.getElementById("lga").value = data.lga || "";
+            document.getElementById("gender").value = data.gender || "";
+            document.getElementById("position").value = data.position || "";
 
-                    // alert("Existing invitee found. Details auto-filled ✅");
-                    // show inline boostrap alert
-                    const messageBox = document.getElementById("prefill-message-box");
-                    if (messageBox){
-                        messageBox.innerHTML=`
-                        <div class="alert alert-info alert-dismissible fade show" role="alert">
-                           We found your record. Your details have been updated, Please register for event.
-                           <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="close"></button>
-                           </div>`;
-                        }
-                }
-            })
-            .catch(err => console.error("Lookup failed:", err));
+            const messageBox = document.getElementById("prefill-message-box");
+            if (messageBox) {
+              messageBox.innerHTML = `
+                <div class="alert alert-info alert-dismissible fade show" role="alert">
+                  We found your record. Your details have been prefilled, please select an event to complete registration.
+                  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>`;
+            }
+          }
+        })
+        .catch(err => console.error("Lookup failed:", err));
     }
 
     phoneInput.addEventListener("blur", lookupInvitee);
     emailInput.addEventListener("blur", lookupInvitee);
-});
+  });
 </script>
-
-
 {% endblock %}

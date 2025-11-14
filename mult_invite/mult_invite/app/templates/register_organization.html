@@ -1,5 +1,12 @@
+{% extends "adm_base.html" %}
+
+{% block title %}Super Admin Dashboard - Danweb App{% endblock %}
+
+{% block content %}
+     
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -41,7 +48,7 @@
             font-size: 2.5rem;
             font-weight: 700;
             margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
         }
 
         .header-section p {
@@ -91,7 +98,6 @@
             border-color: var(--primary-color);
             background: linear-gradient(135deg, #f0f4ff 0%, #e0ebff 100%);
         }
-
         .logo-preview {
             width: 120px;
             height: 120px;
@@ -100,7 +106,19 @@
             object-fit: cover;
             margin-bottom: 15px;
             transition: all 0.3s ease;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+            animation: fadeIn 0.4s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
         }
 
         .logo-preview:hover {
@@ -161,7 +179,7 @@
             padding: 15px 20px;
             font-size: 1rem;
             transition: all 0.3s ease;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
         }
 
         .form-control:focus {
@@ -220,7 +238,7 @@
             padding: 15px 20px;
             margin-bottom: 25px;
             border-left: 4px solid;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
 
         .alert-success {
@@ -341,11 +359,11 @@
                 padding: 30px 25px;
                 margin: 20px;
             }
-            
+
             .header-section h1 {
                 font-size: 2rem;
             }
-            
+
             .logo-preview,
             .logo-placeholder {
                 width: 100px;
@@ -359,6 +377,7 @@
                 opacity: 0;
                 transform: translateY(30px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -369,11 +388,14 @@
             animation: fadeInUp 0.8s ease-out;
         }
     </style>
+    
 </head>
+
+
 <body>
     <!-- Header Section -->
     <div class="header-section">
-        <h1><i class="fas fa-building mr-3"></i>Register Your Organization</h1>
+        <h1><i class="fas fa-building mr-3"></i> Register Your Organization</h1>
         <p>Join thousands of organizations using Danweb IT Solutions</p>
     </div>
 
@@ -389,58 +411,58 @@
 
             <!-- Logo Preview Section -->
             <div class="logo-section">
-                <div class="text-center">
-                    {% if org and org.logo_url %}
-                        <img src="{{ url_for('static', filename='images/' + org.logo_url) }}" 
-                             alt="Organization Logo" 
-                             class="logo-preview">
-                    {% else %}
-                        <div class="logo-placeholder">
-                            <img src="{{ url_for('static', filename='images/logo.png') }}" 
-                             alt="Organization Logo" 
-                             class="logo-preview">
-                            <i class="fas fa-image"></i>
-                        </div>
-                    {% endif %}
-                    <div class="logo-info">
-                        <i class="fas fa-info-circle"></i>
-                        Organization logo will appear here
+            <div class="logo-section text-center">
+            <div id="logo-preview-container">
+                {% if org and org.logo_url %}
+                    <img src="{{ url_for('static', filename='images/' + org.logo_url) }}" 
+                        alt="Organization Logo" class="logo-preview" id="logo-preview">
+                {% else %}
+                    <div class="logo-placeholder" id="logo-placeholder">
+                        <i class="fas fa-image"></i>
                     </div>
-                </div>
+                {% endif %}
             </div>
+            <div class="logo-info">
+                <i class="fas fa-info-circle"></i>
+                Organization logo will appear here
+            </div>
+        </div>
 
             <!-- Flash Messages -->
             {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                            <i class="fas fa-{% if category == 'success' %}check-circle{% elif category == 'danger' %}exclamation-triangle{% elif category == 'warning' %}exclamation-circle{% else %}info-circle{% endif %} mr-2"></i>
-                            {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>
-                    {% endfor %}
-                {% endif %}
+            {% if messages %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                <i
+                    class="fas fa-{% if category == 'success' %}check-circle{% elif category == 'danger' %}exclamation-triangle{% elif category == 'warning' %}exclamation-circle{% else %}info-circle{% endif %} mr-2"></i>
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endfor %}
+            {% endif %}
             {% endwith %}
 
             <!-- Registration Form -->
-            <form method="POST" action="{{ url_for('inv.register_organization',existing=existing) }}" enctype="multipart/form-data">
+            <form method="POST" action="{{ url_for('inv.register_organization',existing=existing) }}"
+                enctype="multipart/form-data">
                 {{ form.hidden_tag() }}
 
                 <div class="form-group">
                     {{ form.name.label(class="form-label") }}
                     <i class="fas fa-building"></i>
                     {{ form.name.label.text }}
-                    {{ form.name(class="form-control", placeholder="Enter your organization name (e.g., Acme Corporation)") }}
+                    {{ form.name(class="form-control", placeholder="Enter your organization name (e.g., Acme
+                    Corporation)") }}
                     <div class="help-text">
                         <i class="fas fa-lightbulb"></i>
                         This will be displayed as your organization's official name
                     </div>
                     {% if form.name.errors %}
-                        {% for error in form.name.errors %}
-                            <div class="error-message">
-                                <i class="fas fa-exclamation-circle"></i>{{ error }}
-                            </div>
-                        {% endfor %}
+                    {% for error in form.name.errors %}
+                    <div class="error-message">
+                        <i class="fas fa-exclamation-circle"></i>{{ error }}
+                    </div>
+                    {% endfor %}
                     {% endif %}
                 </div>
 
@@ -454,11 +476,11 @@
                         This creates your unique URL: danweb.com/org/your-slug
                     </div>
                     {% if form.slug.errors %}
-                        {% for error in form.slug.errors %}
-                            <div class="error-message">
-                                <i class="fas fa-exclamation-circle"></i>{{ error }}
-                            </div>
-                        {% endfor %}
+                    {% for error in form.slug.errors %}
+                    <div class="error-message">
+                        <i class="fas fa-exclamation-circle"></i>{{ error }}
+                    </div>
+                    {% endfor %}
                     {% endif %}
                 </div>
 
@@ -476,14 +498,14 @@
                     </div>
                     <div class="help-text">
                         <i class="fas fa-lightbulb"></i>
-                        Recommended: PNG or JPG, max 2MB, square format works best
+                       Recommended: PNG or JPG, max 2MB, square format works best
                     </div>
                     {% if form.logo_url.errors %}
-                        {% for error in form.logo_url.errors %}
-                            <div class="error-message">
-                                <i class="fas fa-exclamation-circle"></i>{{ error }}
-                            </div>
-                        {% endfor %}
+                    {% for error in form.logo_url.errors %}
+                    <div class="error-message">
+                        <i class="fas fa-exclamation-circle"></i>{{ error }}
+                    </div>
+                    {% endfor %}
                     {% endif %}
                 </div>
 
@@ -496,85 +518,103 @@
             <div class="text-center mt-4">
                 <p class="text-muted">
                     <i class="fas fa-shield-alt mr-2"></i>
-                    Your data is secure and encrypted. 
+                    Your data is secure and encrypted.
                     <a href="#" style="color: var(--primary-color);">Privacy Policy</a>
-                </p>
+                 </p>
             </div>
         </div>
     </div>
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    
+
     <script>
-        // File upload preview
-        document.getElementById('logo-upload').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const logoSection = document.querySelector('.logo-section');
-                    const placeholder = logoSection.querySelector('.logo-placeholder');
-                    const existingImg = logoSection.querySelector('.logo-preview');
-                    
-                    if (placeholder) {
-                        placeholder.remove();
-                    }
-                    
-                    if (existingImg) {
-                        existingImg.src = e.target.result;
-                    } else {
-                        const img = document.createElement('img');
-                        img.src = e.target.result;
-                        img.className = 'logo-preview';
-                        img.alt = 'Organization Logo Preview';
-                        logoSection.querySelector('.text-center').insertBefore(img, logoSection.querySelector('.logo-info'));
-                    }
-                };
-                reader.readAsDataURL(file);
-                
-                // Update file input label
-                const label = document.querySelector('.file-input-label span');
+    // File upload preview
+    document.getElementById('logo-upload').addEventListener('change', function (e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                const logoSection = document.querySelector('.logo-section');
+                const logoContainer = logoSection.querySelector('.text-center');
+                const placeholder = logoSection.querySelector('.logo-placeholder');
+                const existingImg = logoSection.querySelector('.logo-preview');
+
+                // 🩵 Remove placeholder completely before inserting preview
+                if (placeholder) {
+                    placeholder.remove();
+                }
+
+                // 🩵 If preview already exists, update it
+                if (existingImg) {
+                    existingImg.src = event.target.result;
+                } else {
+                    // 🩵 Create a new image element dynamically
+                    const img = document.createElement('img');
+                    img.src = event.target.result;
+                    img.className = 'logo-preview';
+                    img.alt = 'Organization Logo Preview';
+                    logoContainer.insertBefore(img, logoSection.querySelector('.logo-info'));
+                }
+            };
+            reader.readAsDataURL(file);
+
+            // 🩵 Update file input label text
+            const label = document.querySelector('.file-input-label span');
+            if (label) {
                 label.textContent = file.name;
+            }
+        }
+    });
+
+    // Form validation feedback
+    document.querySelectorAll('.form-control').forEach(input => {
+        input.addEventListener('blur', function () {
+            if (this.value.trim() === '' && this.hasAttribute('required')) {
+                this.style.borderColor = 'var(--danger-color)';
+            } else {
+                this.style.borderColor = 'var(--success-color)';
             }
         });
 
-        // Form validation feedback
-        document.querySelectorAll('.form-control').forEach(input => {
-            input.addEventListener('blur', function() {
-                if (this.value.trim() === '' && this.hasAttribute('required')) {
-                    this.style.borderColor = 'var(--danger-color)';
-                } else {
-                    this.style.borderColor = 'var(--success-color)';
-                }
-            });
-            
-            input.addEventListener('focus', function() {
-                this.style.borderColor = 'var(--primary-color)';
-            });
+        input.addEventListener('focus', function () {
+            this.style.borderColor = 'var(--primary-color)';
+        });
+    });
+
+    // Slug auto-generation from name
+    const nameInput = document.querySelector('input[name="name"]');
+    const slugInput = document.querySelector('input[name="slug"]');
+
+    if (nameInput && slugInput) {
+        nameInput.addEventListener('input', function () {
+            if (!slugInput.dataset.userModified) {
+                const slug = this.value
+                    .toLowerCase()
+                    .replace(/[^a-z0-9\s-]/g, '')
+                    .replace(/\s+/g, '-')
+                    .replace(/-+/g, '-')
+                    .trim();
+                slugInput.value = slug;
+            }
         });
 
-        // Slug auto-generation from name
-        const nameInput = document.querySelector('input[name="name"]');
-        const slugInput = document.querySelector('input[name="slug"]');
-        
-        if (nameInput && slugInput) {
-            nameInput.addEventListener('input', function() {
-                if (!slugInput.dataset.userModified) {
-                    const slug = this.value
-                        .toLowerCase()
-                        .replace(/[^a-z0-9\s-]/g, '')
-                        .replace(/\s+/g, '-')
-                        .replace(/-+/g, '-')
-                        .trim();
-                    slugInput.value = slug;
-                }
-            });
-            
-            slugInput.addEventListener('input', function() {
-                this.dataset.userModified = 'true';
-            });
-        }
-    </script>
+        slugInput.addEventListener('input', function () {
+            this.dataset.userModified = 'true';
+        });
+    }
+
+    // Page navigation (if used)
+    function showListPage(event) {
+        console.log("showListPage() called. Implement your page navigation/display logic here.");
+    }
+</script>
+
+
+
 </body>
+
 </html>
+
+
+{% endblock %}

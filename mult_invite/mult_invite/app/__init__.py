@@ -9,6 +9,8 @@ import logging
 from threading import Thread
 import os
 from flask import current_app 
+from flask_dance.contrib.google import make_google_blueprint, google
+
 
 # Initialize extensions without passing app yet
 db = SQLAlchemy()
@@ -21,13 +23,6 @@ csrf = CSRFProtect()
 # Helper function for async email sending - MOVED HERE
 def _send_async_email(app, msg):
     
-    #  """
-    # Sends an email asynchronously within an app context.
-    # Args:
-    #     app: The Flask application instance.
-    #     msg_data: A dictionary containing essential email details.
-    #               We pass data, not the Message object, to avoid threading issues.
-    # """
     with app.app_context():
         mail.send(msg)
         
@@ -39,26 +34,6 @@ def send_async_email(subject, recipients, html_body, sender=None):
     threading = Thread(target=_send_async_email, args=(app,msg)).start()
 
 
-
-    # with app.app_context():
-    #     # Reconstruct the Message object from msg_data
-    #     msg = Message(
-    #         msg_data['subject'],
-    #         sender=msg_data['sender'],
-    #         recipients=msg_data['recipients']
-    #     )
-    #     msg.html = msg_data['html_body']
-
-
-
-    #     try:
-    #         mail.send(msg) # mail object is accessible in this context
-    #         app.logger.info(f"Invitation email sent successfully to {msg_data['recipients'][0]} (async).")
-    #     except Exception as e:
-    #         # Log any errors that occur during the actual email sending
-    #         app.logger.error(f"Error sending async email to {msg_data['recipients'][0]}: {e}", exc_info=True)
-
-
 def create_app():
     app = Flask(__name__)
     # app = Flask(__name__, static_folder='static')
@@ -66,7 +41,7 @@ def create_app():
     app.config['SECRET_KEY'] = 'your_secret_key'
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///multi_invitees_event.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['QR_UPLOAD_FOLDER'] = 'static/qr_codes'
+    app.config['QR_UPLOAD_FOLDER'] = 'app/static/qr_codes'
     app.config['IMAGE_UPLOAD_FOLDER'] = 'app/static/images'
      
     #for
@@ -107,6 +82,14 @@ def create_app():
     migrate.init_app(app, db)
     CORS(app)
 
+    # Google OAuth Blueprint
+    google_bp = make_google_blueprint(
+        client_id="YOUR_GOOGLE_CLIENT_ID",
+        client_secret="YOUR_GOOGLE_CLIENT_SECRET",
+        scope=["profile", "email"],
+        redirect_url="/invitee/google/authorized"
+    )
+
     # Logging
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
@@ -116,7 +99,7 @@ def create_app():
     from app.inv.app import app_
      
 
-
+    app_.register_blueprint(google_bp, url_prefix="/invitee/google")
     app.register_blueprint(app_)
     app.register_blueprint(admin_bp)
      

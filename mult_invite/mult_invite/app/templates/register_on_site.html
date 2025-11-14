@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+
+{% block title %}Register On site{% endblock %}
+
+{% block content %}
+
+<div class="container py-4">
+  <div class="text-center mb-4">
+    <h3 class="fw-bold text-primary">{{event.name|title }} Registration</h3>
+      <!-- Flash Messages -->
+ 
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endfor %}
+            {% endif %}
+            {% endwith %}
+            
+    <p class="text-muted small">
+      Please fill in your details below to register and confirm your attendance immediately.
+    </p>
+  </div>
+
+  <div class="card shadow-sm border-0 rounded-3 p-3 mx-auto" style="max-width: 500px;">
+    <form method="POST" 
+      action="{{ url_for('inv.register_on_site', org_uuid=org_uuid, event_id=event.id) }}" 
+      onsubmit="return attachLocation();">
+      
+      {{ form.hidden_tag() }}
+
+
+      <div class="mb-3">
+        {{ form.name.label(class="form-label fw-semibold") }}
+        {{ form.name(class="form-control", placeholder="Full Name") }}
+        {% if form.name.errors %}
+        <div class="text-danger small">{{ form.name.errors[0] }}</div>
+        {% endif %}
+      </div>
+
+      <div class="mb-3">
+        {{ form.phone_number.label(class="form-label fw-semibold") }}
+        {{ form.phone_number(class="form-control", placeholder="Phone Number") }}
+        {% if form.phone_number.errors %}
+        <div class="text-danger small">{{ form.phone_number.errors[0] }}</div>
+        {% endif %}
+      </div>
+
+      <div class="mb-3">
+        {{ form.email.label(class="form-label fw-semibold") }}
+        {{ form.email(class="form-control", placeholder="Email Address (optional)") }}
+        {% if form.email.errors %}
+        <div class="text-danger small">{{ form.email.errors[0] }}</div>
+        {% endif %}
+      </div>
+
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          {{ form.state.label(class="form-label fw-semibold") }}
+          {{ form.state(class="form-select") }}
+          {% if form.state.errors %}
+            <div class="text-danger small">{{ form.state.errors[0] }}</div>
+          {% endif %}
+        </div>
+        <div class="col-md-6 mb-3">
+          {{ form.lga.label(class="form-label fw-semibold") }}
+          {{ form.lga(class="form-select") }}
+        </div>
+      </div>
+
+      <div class="mb-3">
+        {{ form.gender.label(class="form-label fw-semibold") }}
+        {{ form.gender(class="form-select") }}
+        {% if form.gender.errors %}
+            <div class="text-danger small">{{ form.gender.errors[0] }}</div>
+        {% endif %}
+      </div>
+
+      <div class="mb-3">
+        {{ form.position.label(class="form-label fw-semibold") }}
+        {{ form.position(class="form-control", placeholder="Position / Role") }}
+       {% if form.position.errors %}
+            <div class="text-danger small">{{ form.position.errors[0] }}</div>
+        {% endif %}
+      </div>
+
+      <div class="mb-3">
+        {{ form.address.label(class="form-label fw-semibold") }}
+        {{ form.address(class="form-control", placeholder="Residential Address") }}
+        {% if form.address.errors %}
+            <div class="text-danger small">{{ form.address.errors[0] }}</div>
+        {% endif %}
+      </div>
+
+      <!-- Hidden event details -->
+      <input type="hidden" name="event_id" value="{{ event.id }}">
+      {{ form.latitude(id="latitude") }} {# Hidden field for latitude #}
+      {{ form.longitude(id="longitude") }} {# Hidden field for longitude #}
+
+      <button type="submit" class="btn btn-success w-100 py-2 mt-2">
+        Confirm & Mark Attendance
+      </button>
+     <p><small><i>Please,Ensure your device location is turn on</i></small></p>
+
+    </form>
+
+  </div>
+
+  <div class="text-center mt-3 small text-muted">
+    <p>If you have already registered, please return to the attendance confirmation page.</p>
+  </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<script>
+  $(document).ready(function () {
+    $('#state').change(function () {
+      var selectedState = $(this).val();
+      if (selectedState) {
+        $.ajax({
+          url: "{{ url_for('inv.get_lgas') }}",
+          type: 'GET',
+          data: { state: selectedState },
+          success: function (response) {
+            var lgaSelect = $('#lga');
+            lgaSelect.empty();
+            lgaSelect.append($('<option>', {
+              value: '',
+              text: 'Select LGA',
+              disabled: true,
+              selected: true
+            }));
+            $.each(response.lga, function (index, lga) {
+              lgaSelect.append($('<option>', {
+                value: lga,
+                text: lga
+              }));
+            });
+            lgaSelect.prop('disabled', false);
+          },
+          error: function () {
+            alert('Error loading LGAs.');
+          }
+        });
+      } else {
+        $('#lga').empty().append($('<option>', {
+          value: '',
+          text: 'Select LGA',
+          disabled: true,
+          selected: true
+        })).prop('disabled', true);
+      }
+    });
+
+    // Initialize the LGA dropdown on page load
+    if ($('#state').val()) {
+      $('#state').trigger('change');
+    } else {
+      $('#lga').prop('disabled', true);
+    }
+  });
+</script>
+
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const phoneInput = document.getElementById("phone_number");  // adjust to your WTForms field id
+    const emailInput = document.getElementById("email");
+
+    function lookupInvitee() {
+      const phone = phoneInput.value.trim();
+      const email = emailInput.value.trim();
+      if (!phone && !email) return;
+
+      fetch(`/${"{{ org_uuid }}"}/invitee_lookup?phone=${phone}&email=${email}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.exists) {
+            // Auto-fill the form
+            document.getElementById("name").value = data.name || "";
+            document.getElementById("email").value = data.email || "";
+            document.getElementById("phone_number").value = data.phone_number || "";
+            document.getElementById("address").value = data.address || "";
+            document.getElementById("state").value = data.state || "";
+            document.getElementById("lga").value = data.lga || "";
+            document.getElementById("gender").value = data.gender || "";
+            document.getElementById("position").value = data.position || "";
+
+            // alert("Existing invitee found. Details auto-filled ✅");
+            // show inline boostrap alert
+            const messageBox = document.getElementById("prefill-message-box");
+            if (messageBox) {
+              messageBox.innerHTML = `
+                        <div class="alert alert-info alert-dismissible fade show" role="alert">
+                           We found your record. Your details have been updated, Please register for event.
+                           <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="close"></button>
+                           </div>`;
+            }
+          }
+        })
+        .catch(err => console.error("Lookup failed:", err));
+    }
+
+    phoneInput.addEventListener("blur", lookupInvitee);
+    emailInput.addEventListener("blur", lookupInvitee);
+  });
+</script>
+<script>
+function attachLocation() {
+    if (!navigator.geolocation) {
+        alert("❌ Geolocation not supported by your browser.");
+        return false;
+    }
+
+    alert("📍 Please click 'Allow' to share your location.");
+
+    // Disable submit button to prevent double submission
+    const submitBtn = document.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.innerText = "Getting location...";
+
+    navigator.geolocation.getCurrentPosition(
+        function (position) {
+            document.getElementById("latitude").value = position.coords.latitude;
+            document.getElementById("longitude").value = position.coords.longitude;
+
+            submitBtn.innerText = "Submitting...";
+            document.forms[0].submit();  // manually submit after GPS
+        },
+        function (error) {
+            submitBtn.disabled = false;
+            submitBtn.innerText = "Confirm & Mark Attendance";
+
+            let message = "⚠️ Unable to fetch location.";
+            switch (error.code) {
+                case error.PERMISSION_DENIED:
+                    message = "❌ Location access denied. Please allow and retry.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    message = "⚠️ Location unavailable. Try moving outside or enable GPS.";
+                    break;
+                case error.TIMEOUT:
+                    message = "⏳ Location request timed out. Try again.";
+                    break;
+            }
+            alert(message);
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+
+    return false; // stop normal submit
+}
+</script>
+
+{% endblock %}

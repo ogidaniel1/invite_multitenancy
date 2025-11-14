@@ -64,9 +64,7 @@
         }
     </style>
 </head>
-
-<body>
-    <!-- Navigation -->
+<!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container">
             <a class="navbar-brand" href="/">
@@ -86,11 +84,16 @@
                     <i class="fas fa-plus me-1"></i>
                     Add New
                 </a>
-
+              <!-- <li> -->
+                <a class="nav-link active" href="{{ url_for('inv.logout_super',org_uuid=org_uuid) }}">
+                    <i class="fas fa-sign-out-alt" aria-hidden="true"></i> logout 
+                </a>
             </div>
         </div>
     </nav>
 
+<body>
+    
     <!-- Flash Messages -->
     <div class="container mt-3">
         <div id="flash-messages">
@@ -253,8 +256,8 @@
                                         <h2 id="detail-name" class="mb-1"></h2>
                                         <p class="text-muted mb-0">
                                             <i class="fas fa-link me-1"></i>
-                                            <a class="nav-link {% if request.path == url_for('inv.show_invitees',org_uuid=organization.uuid) %}active{% endif %}"
-                                                href="{{ url_for('inv.show_invitees',org_uuid=organization.uuid) }}">
+                                            <a class="nav-link {% if request.path == url_for('inv.show_invitees',org_uuid=organizations.uuid) %}active{% endif %}"
+                                                href="{{ url_for('inv.show_invitees',org_uuid=organizations.uuid) }}">
                                                 <i class="bi bi-speedometer2"></i><span id="detail-slug"></span>
                                             </a>
                                         </p>
@@ -505,7 +508,9 @@
             }
         }
 
+
         // Render organizations grid here
+       
         function renderOrganizations(orgs) {
             const grid = document.getElementById('organizations-grid');
             const noResults = document.getElementById('no-results');
@@ -678,6 +683,14 @@
 
             showDetailPage();
         }
+
+        // initialize
+        document.addEventListener('DOMContentLoaded', function(){
+            renderOrganizations(filteredOrganizations);
+            setupSearch();
+        });
+
+        
 
         // Edit organization
         function editOrganization() {

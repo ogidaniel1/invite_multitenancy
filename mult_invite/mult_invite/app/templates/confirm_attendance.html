@@ -123,11 +123,8 @@
                 {% endwith %}
                         
                <h2>
-                <!-- <img src="{{ url_for('static', filename='images/' ~ org.logo_url) }}" alt="{{ org.name }} Logo"
-                    class="profile-image-container" style="max-width: 150px;"> 
-               <i class="bi bi-person-circle text-primary" ></i> -->
-             <div class="image-container">
-               <img src="{{ url_for('static', filename='images/' ~ (org.logo_url or 'image_2.jpg')) }}" 
+            <div class="image-container">
+               <img src="{{ url_for('static', filename='images/' ~ (event.event_logo_url or 'image_2.jpg')) }}" 
                        alt="{{org.slug }} Image" 
                        class="responsive-image">
                 </h2>
@@ -135,7 +132,7 @@
             <h3><span>{{event.name}}</span></h3>
             <h4>Confirm Attendance</h4>
 
-       <form method="POST" action="{{ url_for('inv.confirm_attendance',org_uuid=org_uuid, event_id=event.id) }}" onsubmit="return attachLocation();">
+        <form method="POST" action="{{ url_for('inv.confirm_attendance',org_uuid=org_uuid, event_id=event.id) }}" onsubmit="return attachLocation();">
             {{ form.hidden_tag() }}
             <div class="mb-3">
                 {{ form.phone_number.label(class="form-label") }}

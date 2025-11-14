@@ -19,13 +19,15 @@ from itsdangerous import URLSafeSerializer
 # from app import Organization
 
 
+
 #serializer for masking qr link generation for invitee
 def get_serializer():
     return URLSafeSerializer(current_app.config['SECRET_KEY'], salt="invitee-link")
 
 
 class Config:
-
+   
+ 
         
     # Improved parsing of allowed export emails
     ALLOWED_EXPORT_EMAILS = [email.strip() for email in 

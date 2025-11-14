@@ -50,17 +50,18 @@ from io import BytesIO
 from config import Config,get_serializer
 # ,org_admin_required,super_required
 import uuid
-from sqlalchemy.dialects.postgresql import UUID
+# from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy import func
 from flask_cors import CORS # For handling CORS if frontend is on a different origin
 from datetime import datetime
 from app import db
-from app.models import LoginForm,ActionLog,DeleteInviteeForm,DeleteLog,OrganizationForm,Location,OrgIdentifierForm
-from app.models import Organization,Admin,Invitation,Invitee,InviteeForm,super_required,SubmitField,Feedback,Event,EventInvitee
-from app.models import FeedbackForm,AttendanceForm,AdminForm,admin_or_super_required,fetch_lgas_all,org_admin_or_super_required,normalize_phone
+from app.models import LoginForm,ActionLog,DeleteInviteeForm,DeleteLog,OrganizationForm,Location,OrgIdentifierForm,is_authorized_user
+from app.models import Organization,Admin,Invitation,Invitee,InviteeForm,super_required,Feedback,Event,EventInvitee,Attendance,invitee_only
+from app.models import FeedbackForm,AttendanceForm,AdminForm,admin_or_super_required,fetch_lgas_all,fetch_lgas,org_admin_or_super_required
 from config import Config,get_serializer
 from app import csrf,mail
 from flask import current_app
+from flask_dance.contrib.google import make_google_blueprint, google
 
 
 from app.inv.tokens import generate_reset_token, verify_reset_token,send_password_reset_email,send_admin_login_link,send_confirm_email
@@ -98,17 +99,12 @@ def register_organization():
     if form.validate_on_submit():
         file = form.logo_url.data
 
-        existing_slug = Organization.query.filter_by(slug=form.slug.data).first()
-        existing_name = Organization.query.filter_by(name=form.name.data).first()
-
+        existing_slug = Organization.query.filter_by(slug=form.slug.data,name=form.name.data).first()
+       
         if existing_slug:
             flash('Organization slug already exists. Choose another one.', 'danger')
             return redirect(url_for('inv.register_organization'))
-
-        if existing_name:
-            flash('Organization name already exists. Choose another one.', 'danger')
-            return redirect(url_for('inv.register_organization'))
-
+ 
         filename = Config.save_uploaded_image(file, prefix=form.slug.data + "_") if file else None
 
         if filename is None:
@@ -174,19 +170,26 @@ def all_org():
 
 # Add these routes to your existing Flask application
 
-@app_.route('/organization/<int:org_id>/view')
+@app_.route('/organization/view')
 @super_required
-def view_organization(org_id):
+def view_organization():
     """View a specific organization details"""
-    organization = Organization.query.get_or_404(org_id)
-    
-    # Get additional stats if needed
-    active_locations_count = len(organization.get_active_locations())
-    
-    return render_template('organizations.html', 
-                         organization=organization,
-                         active_locations_count=active_locations_count)
 
+    organizations = Organization.query.all()
+    org_dat=[{
+        'id': org.id,
+        'name': org.name,
+        'address': org.address,
+        'is_active': org.is_active,
+        'created_at': org.created_at.isoformat(),
+        'active_locations_count':len(org.get_active_locations())
+            }
+    for org in organizations
+    ]
+    return render_template('organizations.html', 
+                         organizations=org_dat)
+        
+     
 
 @app_.route('/organization/<int:org_id>/edit', methods=['GET', 'POST'])
 @super_required
@@ -200,23 +203,23 @@ def edit_organization(org_id):
         
         # Check if slug already exists (excluding current organization)
         existing_slug = Organization.query.filter(
-            Organization.slug == form.slug.data,
+            Organization.slug == form.slug.data,Organization.name == form.name.data,
             Organization.id != org_id
         ).first()
         
         # Check if name already exists (excluding current organization)
-        existing_name = Organization.query.filter(
-            Organization.name == form.name.data,
-            Organization.id != org_id
-        ).first()
+        # existing_name = Organization.query.filter(
+        #     Organization.name == form.name.data,
+        #     Organization.id != org_id
+        # ).first()
         
         if existing_slug:
             flash('Organization slug already exists. Choose another one.', 'danger')
             return render_template('organizations.html', form=form, organization=organization)
         
-        if existing_name:
-            flash('Organization name already exists. Choose another one.', 'danger')
-            return render_template('organizations.html', form=form, organization=organization)
+        # if existing_name:
+        #     flash('Organization name already exists. Choose another one.', 'danger')
+        #     return render_template('organizations.html', form=form, organization=organization)
         
         try:
             # Handle logo upload
@@ -462,59 +465,80 @@ def bulk_organization_action():
 
 
 # #####.........routes.py...
-
-@app_.route('/login/', methods=['GET', 'POST']) # Renamed to /universal_login for clarity, but you can keep /login/
+ 
+@app_.route('/login/', methods=['GET', 'POST'])
 def universal_login():
     form = OrgIdentifierForm()
 
-    # If the user is already authenticated, redirect them away from login page
-    # (Optional, but generally good practice)
+    #  If already logged in, send them where they belong
+    if current_user.is_authenticated:
+        if hasattr(current_user, "is_invitee") and current_user.is_invitee:
+            org = current_user.organization
+            return redirect(url_for('inv.invitee_event_profile', org_uuid=org.uuid))
+        elif isinstance(current_user, Admin) and current_user.is_org_admin:
+                org = current_user.organization
+                return redirect(url_for('inv.show_invitees', org_uuid=org.uuid))
 
+        elif isinstance(current_user, Admin) and current_user.is_location_admin:
+                org = current_user.organization
+                return redirect(url_for('inv.show_invitees', org_uuid=org.uuid))
+
+        elif isinstance(current_user, Admin):
+            org = current_user.organization
+            return redirect(url_for('inv.show_invitees', org_uuid=org.uuid))
+        return redirect(url_for('inv.universal_login'))
+    
     if form.validate_on_submit():
         identifier = form.org_identifier.data.strip()
 
-        # 1. Try to find an Organization by its exact slug or a partial name match
+        #Try finding organization by name or slug
         org = Organization.query.filter(
-            (Organization.slug == identifier.lower()) | # Use .lower() for slug comparison if slugs are lowercase
-            (Organization.name.ilike(f"%{identifier}%")) # Case-insensitive partial name match
+            (Organization.slug == identifier.lower()) |
+            (Organization.name.ilike(f"%{identifier}%"))
         ).first()
 
         if org:
             flash(f"Please log in to {org.name}.", "info")
-            # Redirect to the organization's specific login page
             return redirect(url_for('inv.login', org_uuid=org.uuid))
 
-        # 2. If not found by organization name/slug, check if the identifier is an email
+        # If identifier looks like an email, try both Admin and Invitee
         if "@" in identifier:
-            # IMPORTANT: Filter by the exact email address
             admin = Admin.query.filter_by(email=identifier.lower()).first()
+            invitee = Invitee.query.filter_by(email=identifier.lower()).first()
 
+            # Admin case
             if admin:
-                # Admin account found by exact email
                 if admin.organization:
-                    # If the admin belongs to a specific organization, redirect to its login page
                     flash(f"Please log in to {admin.organization.name}.", "info")
                     return redirect(url_for('inv.login', org_uuid=admin.organization.uuid))
                 elif admin.is_super_admin:
-                    # If it's a super admin, they might not be tied to a specific organization UUID in the URL
-             
-                    first_available_org = Organization.query.first() # Or a specific 'main' org
-                    if first_available_org:
-                        flash("Super Admin account found. Please log in with your credentials.", "info")
-                        return redirect(url_for('app_.login', org_uuid=first_available_org.uuid))
+                    first_org = Organization.query.first()
+                    if first_org:
+                        flash("Super Admin found. Please log in with your credentials.", "info")
+                        return redirect(url_for('app_.login', org_uuid=first_org.uuid))
                     else:
-                        flash("Super Admin account found, but no organizations exist to log into.", "danger")
-                        return render_template("universal_login.html", form=form) # Stay on page
-
+                        flash("Super Admin found, but no organization is available.", "danger")
+                        return render_template("universal_login.html", form=form)
                 else:
-                    # Admin exists but has no associated organization and is not a super admin (unlikely given your role system)
-                    flash("Admin account found, but no associated organization. Please contact support.", "danger")
+                    flash("Admin found, but not linked to any organization.", "danger")
+                    return render_template("universal_login.html", form=form)
+
+            # Invitee case
+            elif invitee:
+                org = invitee.organization
+                if org:
+                    flash(f"Invitee found. Please log in to {org.name}.", "info")
+                    return redirect(url_for('inv.invitee_manual_login', org_uuid=org.uuid))
+                else:
+                    flash("Invitee account found, but not linked to an organization.", "danger")
+                    return render_template("universal_login.html", form=form)
+
             else:
-                # Email format, but no admin found with that exact email
-                flash("No admin account found with that email address.", "danger")
+                flash("No account found with that email address.", "danger")
+
         else:
-            # Identifier is not an email, and no organization was found by name/slug
-            flash("Organization name/slug or admin email not found. Please try again.", "danger")
+            # Identifier isn’t an email or a valid org slug
+            flash("Invalid organization name/slug or email. Please try again.", "danger")
 
     return render_template("universal_login.html", form=form)
 
@@ -533,7 +557,9 @@ def super_login():
         if admin and admin.check_password(form.password.data):
             if admin.is_super_admin:
                 login_user(admin)
-                session['admin_id'] = admin.id
+                # session['user_role'] = "admin" 
+                # session['org_uuid'] = str(org.uuid)
+                # session['admin_id'] = admin.id
                  # ✅ Update last login
                 admin.last_login = datetime.utcnow()
                 db.session.commit()
@@ -546,10 +572,12 @@ def super_login():
     return render_template('super_login.html',form=form, org=org)
 
 
+
 @app_.route('/<uuid:org_uuid>/login', methods=['GET', 'POST']) 
-def login(org_uuid,event_id=0):
-    form = LoginForm()
+def login(org_uuid):
+
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+    form = LoginForm()
 
     if form.validate_on_submit():
         admin = Admin.query.filter_by(email=form.email.data).first()
@@ -559,9 +587,9 @@ def login(org_uuid,event_id=0):
             if admin.is_super_admin or (admin.organization_id == org.id):
                 # Pass form.remember_me.data to login_user()
                 login_user(admin, remember=form.remember_me.data) # <-- CRUCIAL CHANGE
+                session['user_role'] = "admin" 
                 session['org_uuid'] = str(org.uuid)
                 flash('Login successful!', 'success')
-
                 admin.last_login = datetime.utcnow()
                 db.session.commit()
 
@@ -571,7 +599,7 @@ def login(org_uuid,event_id=0):
                     return redirect(url_for('admin.management_dashboard', org_uuid=org.uuid))
                 else:
                     events = Event.query.filter_by(organization_id=org.id)
-                    return redirect(url_for('inv.show_event_invitees',events=events, org_uuid=org.uuid))
+                    return redirect(url_for('inv.show_event_invitees',org_uuid=org.uuid))
             else:
                 flash('Unauthorized access to this organization.', 'danger')
         else:
@@ -580,13 +608,128 @@ def login(org_uuid,event_id=0):
     return render_template('login.html', form=form, org=org)
 
 
+@app_.route('/login/<token>')
+def login_with_token(token):
+    email = verify_reset_token(token)
+    if not email:
+        flash("Invalid or expired login link.", "danger")
+        return redirect(url_for("inv.universal_login"))
+    
+    admin = Admin.query.filter_by(email=email).first_or_404()
+    
+    if not admin:
+        flash("Admin account not found.", "danger")
+        return redirect(url_for("inv.universal_login"))
+
+    # login user
+    login_user(admin)
+    flash(f"Welcome back {admin.name}!.", "success")
+    event = Event.query.filter_by(organization_id=admin.organization.id).order_by(Event.start_time.desc()).first()
+    if event:
+        return redirect(url_for("inv.show_invitee_event", org_uuid=admin.organization.uuid, event_id=event.id))
+    else:
+        return redirect(url_for("inv.show_event_invitees", org_uuid=admin.organization.uuid))
+
+
+
+# -----------------------------
+# GOOGLE LOGIN (Invitee)
+# -----------------------------
+@app_.route('/<uuid:org_uuid>/login/google')
+def login_with_google(org_uuid):
+    
+    """   Redirect invitee to Google OAuth login.   Flask-Dance handles the redirect.
+    """
+    org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+    if not google.authorized:
+        # Redirect to Google login route handled by Flask-Dance
+        return redirect(url_for("inv.google.login",org=org))
+
+    # If already authorized, continue directly to callback handler
+    return redirect(url_for("inv.google_auth_callback", org_uuid=org_uuid))
+
+
+@app_.route('/<uuid:org_uuid>/login/google/callback')
+def google_auth_callback(org_uuid):
+    """
+    Handle Google OAuth callback for invitee login.
+    """
+    org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+
+    # Fetch user info from Google
+    resp = google.get("/oauth2/v2/userinfo")
+    if not resp.ok:
+        flash("Failed to fetch Google user info.", "danger")
+        return redirect(url_for("inv.invitee_manual_login", org_uuid=org_uuid))
+
+    user_info = resp.json()
+    email = user_info.get("email")
+    name = user_info.get("name", "Guest")
+
+    # Check if invitee exists for this organization
+    invitee = Invitee.query.filter_by(email=email, organization_id=org.id).first()
+    if not invitee:
+        # Optionally auto-create invitee
+        invitee = Invitee(
+            name=name,
+            email=email,
+            organization_id=org.id,
+        )
+        db.session.add(invitee)
+        db.session.commit()
+
+    # Log user in
+    login_user(invitee)
+    flash(f"Welcome back, {invitee.name}!", "success")
+    
+    # Redirect to their event list
+    return redirect(url_for("inv.invitee_event_profile", org_uuid=org.uuid))
+
+
+# MANUAL LOGIN (Email or Phone)
+@app_.route('/<uuid:org_uuid>/invitee/login', methods=['GET', 'POST'])
+def invitee_manual_login(org_uuid):
+
+    form = LoginForm()
+    org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+    event=Event.query.filter_by(organization_id=org.id).first_or_404()
+
+    if form.validate_on_submit():
+        
+        invitee = Invitee.query.filter(Invitee.email == form.email.data,Invitee.organization_id == org.id
+        ).first()
+
+        if invitee and invitee.check_password(form.password.data):
+                
+            login_user(invitee, remember=form.remember_me.data) # <-- CRUCIAL CHANGE
+            session['user_role'] = "invitee"
+            session['org_uuid'] = str(org.uuid)
+            flash('Login successful!', 'success')
+            db.session.commit()
+        
+        if invitee:
+            # login_user(invitee)
+            flash(f"Welcome back, {invitee.name}!", "success")
+            return redirect(url_for('inv.invitee_event_profile',event_id=event.id, event=event, org_uuid=org.uuid))
+        else:
+            flash("Invitee not found. Please register on-site.", "danger")
+            return redirect(url_for('inv.register_on_site', org_uuid=org.uuid, event_id=event.id, event=event))
+
+    return render_template("invitee_login.html", form=form, org=org)
+
+
 @app_.route('/<uuid:org_uuid>/logout')
 @login_required
 def logout(org_uuid):
     logout_user()
     flash('You have been logged out!', 'success')
-    return redirect(url_for('inv.login', org_uuid=org_uuid))
-
+    # Redirect based on the user type
+    if hasattr(current_user, 'is_invitee') and current_user.is_invitee:
+        # Invitee → back to manual login page
+        return redirect(url_for('inv.invitee_manual_login', org_uuid=org_uuid))
+    else:
+        # Admin/org-admin → normal admin login
+        return redirect(url_for('inv.login', org_uuid=org_uuid))
 
 
 @app_.route('/logout')
@@ -714,7 +857,6 @@ def del_invitee(org_uuid, invitee_id):
             db.session.commit()
             current_app.logger.info(f"Invitee{invitee.id} ({invitee.name}) deleted from DB permamnently.")
 
-
             log_action(
                 'delete invitee',
                 user_id=current_user.id if current_user.is_authenticated else None,
@@ -748,7 +890,9 @@ def mark_invitee(org_uuid,event_id,invitee_id):
     """
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
     event=Event.query.filter_by(id=event_id, organization_id=org.id).first_or_404()
+    invitee = Invitee.query.filter_by(id=invitee_id, organization_id=org.id).first_or_404()
 
+    today =datetime.utcnow().date()
 
     # --- Role based access ---
     is_authorized = False
@@ -771,6 +915,22 @@ def mark_invitee(org_uuid,event_id,invitee_id):
             'message': 'Permission denied, because You are currently not in the location of event.'
         }), 403
     
+        #ensure check in date is valid
+    if not (event.start_time.date() <= today <= event.end_time.date()):
+        return jsonify({'status': 'error',
+            'message': 'Event is not active today.'
+        }), 400
+    
+    #check for duplication checkin today
+    existing = Attendance.query.filter_by(event_id=event.id, invitee_id=invitee.id, attendance_date=today).first()
+    if existing:
+        return jsonify({'status': 'error','message': f'Already marked present today on {today}.'
+        }), 400
+    
+    #record attendance
+    attendance = Attendance(organization_id=org.id,event_id=event.id, invitee_id=invitee.id,attendance_date=today,check_in_time=datetime.utcnow())
+    db.session.add(attendance)
+    
     # --- CSRF validation ---
     try:
         csrf_token = request.headers.get('X-CSRFToken')
@@ -781,27 +941,24 @@ def mark_invitee(org_uuid,event_id,invitee_id):
     # Perform Attendance Marking Logic
     try:
 
-        invitee = Invitee.query.filter_by(id=invitee_id, organization_id=org.id).first_or_404()
-        
         # Ensure the invitee is actually registered for the event
         link = EventInvitee.query.filter_by(event_id=event.id, invitee_id=invitee.id).first_or_404()
         
-        if link.status == 'Present':
-            return jsonify({'status': 'error', 'message': 'Invitee has already been marked Present'}), 400
-
+        if link:
+            # return jsonify({'status': 'error', 'message': 'Invitee has already been marked Present'}), 400
         # Update event-specific attendance too
-        link.status = 'Present'
-        link.responded_at = datetime.utcnow()
+            link.status = 'Present'
+            link.responded_at = datetime.utcnow()
+            current_app.logger.info("Registration failed","info")
 
-        current_app.logger.info("Registration failed","info")
-      
-
-        # Prevent re-marking if already 'Present'
-        # if invitee.confirmed and invitee.confirmed.lower() == 'Present' or (link.status and link.status.lower() == 'present'):
-        #     return jsonify({'status': 'error', 'message': 'Invitee has already been marked as Present'}), 400
-
-        invitee.confirmed = 'Present'
-        invitee.confirmation_date = datetime.utcnow()
+            # Prevent re-marking if already 'Present'
+            # if invitee.confirmed and invitee.confirmed.lower() == 'Present' or (link.status and link.status.lower() == 'present'):
+            #     return jsonify({'status': 'error', 'message': 'Invitee has already been marked as Present'}), 400
+        
+        # update invitee-confirmed  (summary flag)
+        if invitee.confirmed != 'Present':
+            invitee.confirmed = 'Present'
+            invitee.confirmation_date = datetime.utcnow()
 
         db.session.commit()
         
@@ -818,100 +975,96 @@ def mark_invitee(org_uuid,event_id,invitee_id):
 
 
 ###########################################################
+# manual..........
 
 @app_.route('/<uuid:org_uuid>/<int:event_id>/attendance/confirm', methods=['GET', 'POST'])
-def confirm_attendance(org_uuid,event_id):
-
-    """ invitees self mark attendance and must be in the location"""
+def confirm_attendance(org_uuid, event_id):
+    """Invitees self-mark attendance and must be in the location"""
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
-    event=Event.query.filter_by(id=event_id, organization_id=org.id).first_or_404()
-    
-    # Get the organization's location(s)
+    event = Event.query.filter_by(id=event_id, organization_id=org.id).first_or_404()
     org_locations = Location.query.filter_by(organization_id=org.id).all()
-    
-    # if not org_locations:
-    #     flash('Event location not set. Please contact the administrator.', 'error')
-    #     return redirect(url_for('inv.register', org_uuid=org.uuid))
-    
-    form = AttendanceForm()
-    
-    if form.validate_on_submit():
 
-        raw_phone = form.phone_number.data.strip()
-        normalized_phone = normalize_phone(raw_phone, default_country_code="+234")
+    form = AttendanceForm()
+
+    if form.validate_on_submit():
+        phone_number = form.phone_number.data.strip()
+        # normalized_phone = normalize_phone(raw_phone, default_country_code="+234")
         user_latitude = form.latitude.data
         user_longitude = form.longitude.data
-        
-        # Find the invitee
+
+        # 1️⃣ Find invitee
         invitee = Invitee.query.filter_by(
-            phone_number=normalized_phone, 
+            phone_number=phone_number, 
             organization_id=org.id
         ).first()
-        
+
+        # 2️⃣ Not found at all → new user (redirect to register page)
         if not invitee:
-            flash('Records not found. Please register first.', 'danger')
-            return redirect(url_for('inv.register', org_uuid=org.uuid))
-        
-        #find invitee-event link
-        link=EventInvitee.query.filter_by(invitee_id=invitee.id,event_id=event_id).first()
+            flash("You’re not found in our records. Please register first.", "danger")
+            return redirect(url_for('inv.register_on_site', org_uuid=org.uuid, event_id=event.id))
+
+        # 3️⃣ Found but not linked to event → show “not registered for event”
+        link = EventInvitee.query.filter_by(
+            invitee_id=invitee.id, event_id=event.id
+        ).first()
 
         if not link:
             return render_template(
-                    'invitee_status.html',
-                    org_uuid=org.uuid,
-                    status='not_registered',
-                    event=event,
-                    invitee=invitee,
-                    message= f"You are not registered fot this event."
-                    )
+                'invitee_status.html',
+                org_uuid=org.uuid,
+                status='not_registered',
+                event=event,
+                invitee=invitee,
+                message=f"You are not registered for this event."
+            )
 
-        # event = link.event
-        # check date
+        # 4️⃣ Date validation
         today = datetime.utcnow().date()
-        
-        if today != event.start_time.date():
+        if not (event.start_time.date() <= today <= event.end_time.date()):
             return render_template(
-                    'invitee_status.html',
-                    org_uuid=org.uuid,
-                    status='invalid_date',
-                    event=event,
-                    invitee=invitee,
-                    message= f"Attendance can only be confirmed on {event.start_time.strftime('%Y-%m-%d')}."
-                    )
-            
-        # Check if already confirmed
-        if invitee.confirmed == 'Present':
+                'invitee_status.html',
+                org_uuid=org.uuid,
+                status='invalid_date',
+                event=event,
+                invitee=invitee,
+                message=f"Attendance can only be confirmed between "
+                        f"{event.start_time.strftime('%Y-%m-%d')} and {event.end_time.strftime('%Y-%m-%d')}."
+            )
+
+        # 5️⃣ Prevent duplicate check-in
+        existing = Attendance.query.filter_by(
+            event_id=event.id,
+            invitee_id=invitee.id,
+            attendance_date=today
+        ).first()
+
+        if existing:
             return render_template(
                 'invitee_status.html',
                 org_uuid=org.uuid,
                 status='already_confirmed',
                 event=event,
                 invitee=invitee,
-                message="Attendance already marked for this invitee."
+                message=f"Attendance already confirmed today ({today.strftime('%Y-%m-%d')})."
             )
-        
-        # Check distance from any of the organization's locations
+
+        # 6️⃣ Verify location range
         user_location = (user_latitude, user_longitude)
         is_within_range = False
         closest_location = None
         min_distance = float('inf')
-        
+
         for location in org_locations:
-            if location.latitude is not None and location.longitude is not None:
+            if location.latitude and location.longitude:
                 venue_location = (location.latitude, location.longitude)
                 distance = geodesic(venue_location, user_location).meters
-                
-                # Keep track of the closest location
                 if distance < min_distance:
                     min_distance = distance
                     closest_location = location
-                
-                # Check if within acceptable range (100 meters)
                 if distance <= 100:
                     is_within_range = True
                     break
-        
-        # If not within range of any location
+
         if not is_within_range:
             return render_template(
                 'invitee_status.html',
@@ -919,31 +1072,40 @@ def confirm_attendance(org_uuid,event_id):
                 status='out_of_range',
                 event=event,
                 invitee=invitee,
-                message=f"You are not within the event location. You are {min_distance:.0f}m away from the nearest venue.",
+                message=f"You are not within the event location. "
+                        f"You are {min_distance:.0f}m away from the nearest venue.",
                 distance=min_distance,
                 closest_location=closest_location.name if closest_location else "Unknown"
             )
-        
-        # Update invitee with confirmation details
+
+        # 7️⃣ Record attendance
+        attendance = Attendance(
+            organization_id=org.id,
+            event_id=event.id,
+            invitee_id=invitee.id,
+            attendance_date=today,
+            check_in_time=datetime.utcnow()
+        )
+        db.session.add(attendance)
+
+        # 8️⃣ Update invitee status
         invitee.latitude = user_latitude
         invitee.longitude = user_longitude
         invitee.confirmed = 'Present'
         invitee.status = 'confirmed'
         invitee.confirmation_date = datetime.utcnow()
-        
+
         try:
             db.session.commit()
-            
-            # Log the action
             log_action(
                 'Invitee Confirmed Attendance',
                 user_id=current_user.id if current_user.is_authenticated else None,
                 record_type='invitee',
-                event=event,
+                event_id=event.id,
                 record_id=invitee.id,
                 organization_id=org.id
             )
-            
+
             return render_template(
                 'invitee_status.html',
                 org_uuid=org.uuid,
@@ -953,49 +1115,165 @@ def confirm_attendance(org_uuid,event_id):
                 message="Attendance marked successfully.",
                 location_name=closest_location.name if closest_location else "Event Location"
             )
-            
         except Exception as e:
             db.session.rollback()
-            flash('An error occurred while confirming attendance. Please try again.', 'danger')
-            return redirect(url_for('inv.confirm_attendance',event_id=event.id, org_uuid=org.uuid))
-    
+            flash(f"An error occurred while confirming attendance. ({str(e)})", "danger")
+            return redirect(url_for('inv.confirm_attendance', org_uuid=org.uuid, event_id=event.id))
+
+    # Fallback GET
     return render_template(
-        'confirm_attendance.html', 
+        'confirm_attendance.html',
         org_uuid=org.uuid,
         org=org,
         form=form,
         event=event,
-        locations=org_locations  # Pass locations to template for display
+        locations=org_locations
     )
-
 
 ###############################################
 
 def generate_qr_code(content: str):
-    
+
 #   # Generate the correct URL using Flask's url_for
-    #  # Generate the correct URL using Flask's url_for
+    # for non-transparent constants.ERROR_CORRECT_L
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.
-        constants.ERROR_CORRECT_L,
+        constants.ERROR_CORRECT_H,
         box_size=10,
         border=4,
     )
 
     qr.add_data(content)
     qr.make(fit=True)
-    img = qr.make_image(fill='black', back_color='white')
+    #apply color
+    img = qr.make_image(fill_color='black', back_color='white').convert("RGBA")
     
+    #make bg transparent
+    datas = img.getdata()
+    new_data = []
+    for item in datas:
+        #changinging pixels
+        if item[0] > 240 and item[1] > 240 and item[2] > 240:
+            new_data.append((255,255,255,0))
+        else:
+            new_data.append(item)
+    img.putdata(new_data)
+
     #if you dont want image saved on your server permanently
     byte_arr = io.BytesIO()
     img.save(byte_arr, format='PNG')
     byte_arr.seek(0)
     return base64.b64encode(byte_arr.getvalue()).decode('utf-8')
 
+###################################################
+
+# generate Qr for poster
+def generate_event_qr(org_uuid,event_id, invitee_id=None):
+    
+    s= get_serializer()
+    payload = {"event_id": event_id}
+    if invitee_id:
+        payload["invitee_id"] =invitee_id
+    token= s.dumps(payload)
+
+    data = url_for('inv.confirm_qr_code_self',org_uuid=org_uuid, token=token,_external=True)
+    # Generate event URL for confirmation
+    folder = os.path.join(current_app.root_path,'static','qrcodes')
+    os.makedirs(folder, exist_ok=True)
+    
+    filename=f'event_{event_id}_qr.png' if not invitee_id else f"invitee_{invitee_id}_event_{event_id}.png"
+    filepath = os.path.join(folder,filename)
+    
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.
+        constants.ERROR_CORRECT_H,
+        box_size=10,
+        border=4,
+    )
+
+    qr.add_data(data)
+    qr.make(fit=True)
+    #apply color
+    img = qr.make_image(fill_color='black', back_color='white').convert("RGBA")
+    
+    #make bg transparent
+    datas = img.getdata()
+    new_data = []
+    for item in datas:
+        #changinging pixels
+        if item[0] > 240 and item[1] > 240 and item[2] > 240:
+            new_data.append((255,255,255,0))
+        else:
+            new_data.append(item)
+    img.putdata(new_data)
+
+    try:
+        img.save(filepath)
+    except Exception as e:
+        current_app.logger.warning(f"Error saving QR: {e}")
+    #return url path flask can serve
+    return url_for('static', filename=f'qrcodes/{filename}', _external=True)
+
+
+#qr link for invitation on event page
+@app_.route('/<uuid:org_uuid>/generate_qr/<int:event_id>', methods =['GET'])
+@login_required
+def generate_qr_link(org_uuid, event_id):
+    """GENERATE A EVENT QR LINK FOR ALL INVITEES TO SCAN"""
+    s=get_serializer()
+    token= s.dumps({"event_id":event_id})
+    # this is the target link embedded in the qr
+    qr_target_link = url_for('inv.confirm_qr_code_self', org_uuid=org_uuid, token=token, _external=True)
+
+    qr_path = generate_event_qr(org_uuid, event_id,invitee_id=None)
+    return jsonify({"qr_image":qr_path, "qr_link":qr_target_link})
 
 ####################################################
 
+#Qr for onsite attendance
+# generate a venue (onsite) attendance QR code
+def generate_attendance_qr(org_uuid, event_id):
+    attendance_url = url_for(
+        'inv.confirm_attendance',
+        org_uuid=org_uuid, event_id=event_id,
+        _external=True
+    )
+
+    #creating QR object
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.
+        constants.ERROR_CORRECT_H,
+        box_size=10,
+        border=4,
+    )
+
+    qr.add_data(attendance_url)
+    qr.make(fit=True)
+    #apply color
+    qr_img = qr.make_image(fill_color='blue', back_color='white').convert("RGBA")
+    
+    #make bg transparent
+    datas = qr_img.getdata()
+    new_data = []
+    for item in datas:
+        #changinging pixels
+        if item[0] > 240 and item[1] > 240 and item[2] > 240:
+            new_data.append((255,255,255,0))
+        else:
+            new_data.append(item)
+    qr_img.putdata(new_data)
+
+    buffer = io.BytesIO()
+    qr_img.save(buffer, format="PNG")
+    buffer.seek(0)
+    qr_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    return f"data:image/png;base64,{qr_b64}"
+
+
+########################################
 @app_.route('/<uuid:org_uuid>/register', methods=['GET', 'POST'])
 def register(org_uuid):
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
@@ -1044,6 +1322,10 @@ def register(org_uuid):
             or_(Invitee.email == email, Invitee.phone_number == phone)
         ).first()
 
+        import secrets
+            # Generate and hash temporary password
+        temp_password = secrets.token_urlsafe(8)
+        hashed_password = generate_password_hash(temp_password)
         
         if invitee:
             # Update profile
@@ -1068,6 +1350,10 @@ def register(org_uuid):
                 register_date=datetime.utcnow(),
                 organization_id=org.id
             )
+    
+
+            # creating default password
+            invitee.set_password(temp_password) # password temporarily
             db.session.add(invitee)
             db.session.flush()  # so invitee.id is available
 
@@ -1080,7 +1366,7 @@ def register(org_uuid):
                 flash("Invalid or expired event selected.", "danger")
                 return redirect(url_for('inv.register', org_uuid=org.uuid))
 
-            # ✅ Check for duplicate using relationship
+            #  Check for duplicate using relationship
             already_registered = any(link.event_id == event.id for link in invitee.event_links)
             if already_registered:
                 s = get_serializer()
@@ -1113,7 +1399,8 @@ def register(org_uuid):
 
             try:
                 db.session.commit()
-                send_qr_code_email(invitee, qr_url, org)
+                send_qr_code_email(invitee, qr_url, org,temp_password)
+               
                 flash("Registration successful! Please check your email for the QR code.", "success")
             except Exception as e:
                 db.session.rollback()
@@ -1135,6 +1422,187 @@ def register(org_uuid):
         existing_invitee=existing_invitee,
         registered_event_ids=registered_event_ids,
     )
+
+
+@app_.route('/<uuid:org_uuid>/event/<int:event_id>/register_on_site', methods=['GET', 'POST'])
+def register_on_site(org_uuid, event_id):
+    org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+    event = Event.query.filter_by(id=event_id, organization_id=org.id).first_or_404()
+    # Get the organization's location(s)
+    org_locations = Location.query.filter_by(organization_id=org.id).all()
+   
+
+    # Allow registration only during the event period
+    today = datetime.utcnow().date()
+    if not (event.start_time.date() <= today <= event.end_time.date()):
+        flash("On-site registration is only available during the event period.", "danger")
+        return redirect(url_for('inv.register', org_uuid=org_uuid))
+
+    form = InviteeForm()
+    if form.state.data:
+        form.lga.choices = [(lga, lga) for lga in fetch_lgas(form.state.data)]
+
+    if form.validate_on_submit():
+        email = form.email.data.lower().strip()
+        phone = form.phone_number.data.strip()
+        user_latitude = form.latitude.data
+        user_longitude = form.longitude.data
+
+        invitee = Invitee.query.filter(
+            Invitee.organization_id == org.id,
+            or_(Invitee.email == email, Invitee.phone_number == phone)
+        ).first()
+
+        if invitee:
+            # Update existing details
+            invitee.name = form.name.data.title()
+            invitee.email = email
+            invitee.phone_number = phone
+            invitee.state = form.state.data
+            invitee.lga = form.lga.data
+            invitee.gender = form.gender.data
+            invitee.position = form.position.data.title()
+        
+        else:
+            invitee = Invitee(
+                name=form.name.data.title(),
+                email=email,
+                phone_number=phone,
+                address=form.address.data,
+                state=form.state.data,
+                lga=form.lga.data,
+                gender=form.gender.data,
+                position=form.position.data.title(),
+                register_date=datetime.utcnow(),
+                organization_id=org.id
+            )
+            db.session.add(invitee)
+            db.session.flush()
+
+        # Check for existing link
+        already_linked = EventInvitee.query.filter_by(
+            event_id=event.id, invitee_id=invitee.id
+        ).first()
+
+        if not already_linked:
+            # Generate QR token
+            s = get_serializer()
+            token = s.dumps({'invitee_id': invitee.id, 'event_id': event.id})
+            qr_url = url_for('inv.confirm_qr_code_self', org_uuid=org.uuid, token=token, _external=True)
+
+            # Create event link + mark attendance
+            link = EventInvitee(
+                event_id=event.id,
+                invitee_id=invitee.id,
+                status="accepted",
+                responded_at=datetime.utcnow(),
+                qr_code_path=qr_url
+            )
+
+            db.session.add(link)
+
+                #check for duplication checkin today
+            existing = Attendance.query.filter_by(event_id=event.id, invitee_id=invitee.id, attendance_date=today).first()
+
+            if existing:
+                return render_template(
+                        'invitee_status.html',
+                        org_uuid=org.uuid,
+                        status='invalid_date',
+                        event=event,
+                        invitee=invitee,
+                        message= f"Attendance already confirmed today {today.strftime('%Y-%m-%d')}."
+                        )
+                
+            # Check distance from any of the organization's locations
+            user_location = (user_latitude, user_longitude)
+            is_within_range = False
+            closest_location = None
+            min_distance = float('inf')
+            
+            for location in org_locations:
+                if location.latitude is not None and location.longitude is not None:
+                    venue_location = (location.latitude, location.longitude)
+                    distance = geodesic(venue_location, user_location).meters
+                    
+                    # Keep track of the closest location
+                    if distance < min_distance:
+                        min_distance = distance
+                        closest_location = location
+                    
+                    # Check if within acceptable range (100 meters)
+                    if distance <= 100:
+                        is_within_range = True
+                        break
+            
+            # If not within range of any location
+            if not is_within_range:
+                return render_template(
+                    'invitee_status.html',
+                    org_uuid=org.uuid,
+                    status='out_of_range',
+                    event=event,
+                    invitee=invitee,
+                    message=f"You are not within the event location. You are {min_distance:.0f}m away from the nearest venue.",
+                    distance=min_distance,
+                    closest_location=closest_location.name if closest_location else "Unknown"
+                )
+
+            attendance = Attendance(
+                organization_id=org.id,
+                event_id=event.id,
+                invitee_id=invitee.id,
+                attendance_date=today,
+                check_in_time=datetime.utcnow()
+            )
+            db.session.add(attendance)
+
+            # Update invitee with confirmation details
+            if invitee.confirmed != 'Present':
+                invitee.latitude = user_latitude
+                invitee.longitude = user_longitude
+                invitee.confirmed = 'Present'
+                invitee.status = 'confirmed'
+                invitee.confirmation_date = datetime.utcnow()
+    
+            try:
+                db.session.commit()
+                send_confirm_email(invitee, event, org)
+                log_action(
+                    'on-site registration',
+                    user_id=current_user.id if current_user.is_authenticated else None,
+                    record_type='invitee',
+                    record_id=invitee.id,
+                    associated_org_id=org.id
+                )
+
+                return render_template(
+                    'invitee_status.html',
+                    org_uuid=org_uuid,
+                    status='confirmed',
+                    invitee=invitee,
+                    event=event,
+                    org=org,
+                    message="You have been successfully registered and marked present. Welcome!"
+                )
+
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.error(f'On-site registration failed: {e}')
+                flash(f'An unexpected error occurred. Please try again.', 'danger')
+                return redirect(url_for('inv.register_on_site', org_uuid=org_uuid, event_id=event_id))
+
+        else:
+            flash("You are already registered for this event.", "info")
+            return redirect(url_for('inv.confirm_attendance', event_id=event.id, org_uuid=org.uuid))
+
+    else:
+        if request.method == 'POST':
+            current_app.logger.warning(f"Form validation failed: {form.errors}")
+            flash("Please check the form and try again.", "danger")
+
+    return render_template('register_on_site.html', form=form, org=org, org_uuid=org_uuid, event=event)
+
 
 # API LOOKUP
 
@@ -1177,6 +1645,7 @@ def edit_invitee(org_uuid, id,event_id):
     """Edit an existing invitee"""
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
         
+    
     state_lgas = fetch_lgas_all()
 
     # now = datetime.utcnow() # Use UTC for consistency
@@ -1341,7 +1810,7 @@ def success(org_uuid, token):
         event_id = data["event_id"]
     except Exception:
         flash("Invalid or tampered link.", "danger")
-        return redirect(url_for("inv.register", org_uuid=org_uuid))
+        return redirect(url_for("inv.register", org_uuid=org_uuid,event_id=event_id))
     
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
 
@@ -1366,50 +1835,140 @@ def success(org_uuid, token):
     )
 
 
-############## admin scans invitee (him/herself) #############
+# automatic
+############## admin scans invitee (him/herself) ##########################
 @app_.route('/<uuid:org_uuid>/confirm_qr_code_self/<token>', methods=['GET'])
-# @org_admin_required
 @csrf.exempt
-def confirm_qr_code_self(org_uuid,token):
+def confirm_qr_code_self(org_uuid, token):
     """
     Allows admin to confirm an invitee’s presence using secure UUID-based URL.
+    Invitees can also scan the same QR provided they are at the venue/location.
     """
 
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
-    
+    org_locations = Location.query.filter_by(organization_id=org.id).all()
+
+    # ✅ Decode token safely before using event_id
     s = get_serializer()
     try:
         data = s.loads(token)
-        invitee_id = data["invitee_id"]
-        event_id = data["event_id"]
+        invitee_id = data.get("invitee_id")
+        event_id = data.get("event_id")
     except Exception:
         flash("Invalid or tampered QR code.", "danger")
-        return redirect(url_for("inv.register", org_uuid=org_uuid))
-    
-    invitee = Invitee.query.filter_by(id=invitee_id, organization_id=org.id).first()
-    #get last registered event link
-    link=EventInvitee.query.filter_by(invitee_id=invitee.id,event_id=event_id).first()
+        return redirect(url_for("inv.register_on_site", org_uuid=org_uuid))
 
-    if not link:
-        flash('Invitee not found for this Event.', 'danger')
-        return redirect(url_for('inv.register',org_uuid=org_uuid))
+    # Fetch event
+    event = Event.query.filter_by(id=event_id, organization_id=org.id).first_or_404()
+    invitee = Invitee.query.filter_by(id=invitee_id, organization_id=org.id).first() if invitee_id else None
+    today = datetime.utcnow().date()
+
+    # Authorization check
+    is_authorized, role = is_authorized_user(current_user, org, event)
+
+    # --- Fix starts here ---
+    # Allow both admins *and* invitees to proceed,
+    # but block truly unauthorized users (wrong org, wrong event, etc.)
+    if not is_authorized and role not in ("invitee", "anonymous"):
+        current_app.logger.info(
+            f"[AUTH FAIL] user={getattr(current_user, 'id', 'anon')} role={role}, "
+            f"user_loc={getattr(current_user, 'location_id', None)}, event_loc={getattr(event, 'location_id', None)}"
+        )
+        return jsonify({
+            'status': 'error',
+            'message': 'Permission denied — you are not authorized for this event or location.'
+        }), 403
     
-    event = link.event
-    today =datetime.utcnow().date()
-    
-    if today != event.start_time.date():
+    # --- Fix ends here ---
+    #If invitee not found — allow onsite registration if event ongoing
+    if not invitee:
+        if event.start_time.date() <= today <= event.end_time.date():
+            flash("Not registered yet. Please complete quick on-site registration to check in.", "warning")
+            return redirect(url_for("inv.register_on_site", org_uuid=org_uuid, event_id=event.id))
+        else:
+            flash("This event is not open for on-site registration.", "danger")
+            return redirect(url_for("inv.register", org_uuid=org_uuid))
+
+    # Prevent duplicate check-ins
+    existing = Attendance.query.filter_by(
+        event_id=event.id, invitee_id=invitee.id, attendance_date=today
+    ).first()
+    if existing:
         return render_template(
+            "invitee_status.html",
+            org_uuid=org.uuid,
+            status="already_checked_in",
+            event=event,
+            invitee=invitee,
+            message=f"Attendance already confirmed today ({today.strftime('%Y-%m-%d')})."
+        )
+
+    # Ensure invitee linked to event
+    link = EventInvitee.query.filter_by(invitee_id=invitee.id, event_id=event.id).first()
+    if not link:
+        flash('Invitee not found for this event.', 'danger')
+        return redirect(url_for('inv.register_on_site', org_uuid=org_uuid))
+    event = link.event
+
+    # Ensure event date valid
+    if not (event.start_time.date() <= today <= event.end_time.date()):
+        return render_template(
+            'invitee_status.html',
+            org_uuid=org.uuid,
+            status='invalid_date',
+            event=event,
+            invitee=invitee,
+            message=f"Attendance can only be confirmed between {event.start_time.date()} and {event.end_time.date()}."
+        )
+
+    # Check location — only required if NOT admin or authorized staff
+    if role in ("super_admin", "org_admin", "location_admin"):
+        location_valid = True
+    else:
+        user_latitude = request.args.get("latitude", type=float)
+        user_longitude = request.args.get("longitude", type=float)
+
+        if not user_latitude or not user_longitude:
+            # Fall back to manual confirmation by phone
+            return redirect(url_for("inv.confirm_attendance", org_uuid=org.uuid, event_id=event.id))
+
+        user_location = (user_latitude, user_longitude)
+        is_within_range = False
+        closest_location = None
+        min_distance = float('inf')
+
+        for location in org_locations:
+            if location.latitude and location.longitude:
+                venue_location = (location.latitude, location.longitude)
+                distance = geodesic(venue_location, user_location).meters
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_location = location
+                if distance <= 100:
+                    is_within_range = True
+                    break
+
+        if not is_within_range:
+            return render_template(
                 'invitee_status.html',
                 org_uuid=org.uuid,
-                status='invalid_date',
+                status='out_of_range',
                 event=event,
                 invitee=invitee,
-                message= f"Attendance can only be confirmed on {event.start_time.strftime('%Y-%m-%d')}."
-                )
+                message=f"You are not within the event location. You are {min_distance:.0f}m away from the nearest venue.",
+                distance=min_distance,
+                closest_location=closest_location.name if closest_location else "Unknown"
+            )
 
-    if not invitee:
-        flash('Invitee not found.', 'danger')
-        return redirect(url_for('inv.register', org_uuid=org_uuid))
+    # Record attendance
+    attendance = Attendance(
+        organization_id=org.id,
+        event_id=event.id,
+        invitee_id=invitee.id,
+        attendance_date=today,
+        check_in_time=datetime.utcnow()
+    )
+    db.session.add(attendance)
 
     if invitee.deleted:
         return render_template(
@@ -1420,41 +1979,36 @@ def confirm_qr_code_self(org_uuid,token):
             message="This invitee has been removed from the list."
         )
 
-    if invitee.confirmed == 'Present':
-        return render_template(
-            'invitee_status.html',
-            org_uuid=org_uuid,
-            status='already_confirmed',
-            invitee=invitee,
-            event=event,
-            message="Invitee already confirmed."
-        )
-
     try:
-        invitee.confirmed = 'Present'
-        invitee.confirmation_date = datetime.utcnow()
+        if invitee.confirmed != 'Present':
+            invitee.confirmed = 'Present'
+            invitee.confirmation_date = datetime.utcnow()
+
         db.session.commit()
 
-        # log_action(
-        log_action('self confirm invitee via QR',user_id=current_user.id if current_user.is_authenticated else None,
-            record_type='invitee',record_id=invitee.id,associated_org_id=org.id)
+        log_action(
+            'self confirm invitee via QR',
+            user_id=current_user.id if current_user.is_authenticated else None,
+            record_type='invitee',
+            record_id=invitee.id,
+            associated_org_id=org.id
+        )
 
         send_confirm_email(invitee, event, org)
 
         return render_template(
             'invitee_status.html',
-            org_uuid=org_uuid,
+            org_uuid=org.uuid,
             status='confirmed',
             invitee=invitee,
             event=event,
-            message="Invitee confirmed successfully."
+            message="Invitee confirmed successfully ✅."
         )
 
     except Exception as e:
         db.session.rollback()
         flash(f'An unexpected error occurred: {str(e)}', 'danger')
         return redirect(url_for('inv.index', org_uuid=org_uuid))
-  
 
 
 ########################################################
@@ -1545,12 +2099,16 @@ def show_invitees(org_uuid):
     try:
         # Use str(org_uuid) to ensure consistency with string-based UUIDs from filter_by
         org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
-        event=Event.query.first_or_404()
+        event=Event.query.first()
 
     except ValueError: # This ValueError catch is for if org_uuid couldn't be converted to UUID type
         flash('Invalid organization identifier.', 'danger')
         return redirect(url_for('inv.universal_login')) # Redirect to universal login if UUID is invalid
-
+    
+    if event is None:
+        flash('You have not create an Event.', 'danger')
+        # Use the org.uuid if available for the universal login redirect, but only if it's the target.
+        return redirect(url_for('inv.add_event',org_uuid=org.uuid))
 
     # --- Role-based access control (Refined) ---
     invitees_query = None # Initialize to None
@@ -1645,15 +2203,17 @@ def show_invitees(org_uuid):
         is_super=current_user.is_super_admin # Pass the correct property to the template
     )
 
-# ######################################...............
+######################################...............
+
 @app_.route('/<uuid:org_uuid>/dashboard_events/<int:event_id>', methods=['GET', 'POST'])
 @admin_or_super_required # This decorator already ensures one of the 3 admin types is logged in
 def show_invitee_event(org_uuid,event_id):
+    
     """
     Displays all invitees for a specific Event in specific organization,
     filtered by user role and optional search query.
     """
-
+    # add invitee access to just events on going and their 
     try:
         # Use str(org_uuid) to ensure consistency with string-based UUIDs from filter_by
         org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
@@ -1850,7 +2410,7 @@ def manage_invitee(org_uuid,event_id):
 
 # ################################################
 
-@app_.route('/<uuid:org_uuid>/dashboard_events')
+@app_.route('/<uuid:org_uuid>/dashboard_events', methods=['GET', 'POST'])
 @admin_or_super_required
 def show_event_invitees(org_uuid):
     """
@@ -1871,7 +2431,9 @@ def show_event_invitees(org_uuid):
 
     # --- Filters from query params ---
     date_filter = request.args.get("date", "all")  # values: all | upcoming | past
+    
     now = datetime.utcnow()
+    
     if date_filter == "upcoming":
         events_query = events_query.filter(Event.start_time >= now)
     elif date_filter == "past":
@@ -1879,6 +2441,7 @@ def show_event_invitees(org_uuid):
 
     # Search by event name
     search = (request.args.get("search") or "").strip()
+    
     if search:
         events_query = events_query.filter(Event.name.ilike(f"%{search}%"))
 
@@ -1954,45 +2517,92 @@ def show_event_invitees(org_uuid):
         date_filter=date_filter,
     )
 
+# 
 
-#dummy testing........for offline..........................
+@app_.route('/<uuid:org_uuid>/invitee_event_profile', methods=['GET'])
+@login_required
+@invitee_only
+def invitee_event_profile(org_uuid):
+    
+    """
+    Displays all events for an invitee:
+    - Ongoing/Upcoming events (they can still register)
+    - Events already attended
+    """
 
-# def send_qr_code_email(invitee, qr_url, org):
-#     try:
-#         # Generate QR code image
-#         qr = qrcode.make(qr_url)
-#         buffer = BytesIO()
-#         qr.save(buffer, format="PNG")
-#         qr_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+    try:
+        org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+    except ValueError:
+        flash("Invalid organization identifier.", "danger")
+        return redirect(url_for('inv.universal_login'))
 
-#         # use organization email
-#         sender_email=  getattr(org, "email", None) or "noreply@noreply.com"
-        
-#         msg = Message(
-#             subject = f"Registration Confirmation -{org.name}",
-#             sender = sender_email,  # Replace with your sender email
-#             recipients=[invitee.email]
-#         )
+    # Ensure current_user is an invitee and belongs to this organization
+    if not isinstance(current_user, Invitee):
+        flash("Only invitees can access this page.", "danger")
+        return redirect(url_for('inv.invitee_manual_login', org_uuid=org_uuid))
 
-#         msg.html = f"""
-#         <p>Dear {invitee.name},</p>
-#         <p>Thank you for registering. Below is your QR code:</p>
-#         <img src="data:image/png;base64,{qr_base64}" alt="QR Code">
-#         <br>
-#         <p>This QR code will be needed to confirm your attendance.</p>
-#         <p>Thank you.</p>
-#         <p><strong>{org.name} Team</strong></p>
-#         """
+    if current_user.organization_id != org.id:
+        flash("You are not authorized to view this organization's events.", "danger")
+        return redirect(url_for('inv.universal_login'))
 
-#         mail.send(msg)
-#         print("Email sent successfully!")
+    invitee = current_user  #the logged-in invitee
+    current_app.logger.info(f"Invitee{invitee.id} ({invitee.name}) dey.")
 
-#     except Exception as e:
-#         print(f"Error sending email: {e}")
-#         raise
+    now = datetime.utcnow()
+
+    # Fetch all events for this org
+    ongoing_events = Event.query.filter(
+        Event.organization_id == org.id,
+        Event.status == 'upcoming',
+        Event.end_time >= now
+    ).order_by(Event.start_time.asc()).all()
+
+    # Events already attended
+    attended_links = (
+        EventInvitee.query
+        .join(Event)
+        .filter(
+            EventInvitee.invitee_id == invitee.id,
+            Event.organization_id == org.id,
+            Invitee.confirmed == 'Present'
+        )
+        .options(joinedload(EventInvitee.event))
+        .all()
+    )
+    attended_events = [link.event for link in attended_links]
+
+    # Registered events (may not have attended yet)
+    registered_links = (
+        EventInvitee.query
+        .join(Event)
+        .filter(
+            EventInvitee.invitee_id == invitee.id,
+            Event.organization_id == org.id,
+        )
+        .options(joinedload(EventInvitee.event))
+        .all()
+    )
+
+    registered_event_ids = {link.event_id for link in registered_links}
+    registered_events = [link.event for link in registered_links]
+
+    # Available events = ongoing ones they haven’t registered for
+    available_events = [ev for ev in ongoing_events if ev.id not in registered_event_ids]
+
+    return render_template(
+        "invitee_event_profile.html",
+        org=org,
+        org_uuid=str(org.uuid),
+        invitee=invitee,
+        available_events=available_events,
+        registered_events=registered_events,
+        attended_events=attended_events,
+    )
 
 
-def send_qr_code_email(invitee, qr_url, org):
+
+#send qr to email
+def send_qr_code_email(invitee, qr_url, org,temp_password):
     try:
         # Generate QR code as Base64
         qr = qrcode.make(qr_url)
@@ -2001,6 +2611,11 @@ def send_qr_code_email(invitee, qr_url, org):
         qr_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
         sender_email = getattr(org, "email", None) or "noreply@noreply.com"
+
+        # temporary password
+        temp_password=temp_password
+
+        login_url =url_for('inv.invitee_manual_login', org_uuid=org.uuid,_external=True)
 
         msg = Message(
             subject=f"Registration Confirmation - {org.name}",
@@ -2013,7 +2628,9 @@ def send_qr_code_email(invitee, qr_url, org):
             invitee=invitee,
             org=org,
             qr_base64=qr_base64,
-            qr_url=qr_url
+            qr_url=qr_url,
+            login_url=login_url,
+            temp_password=temp_password
         )
 
         mail.send(msg)
@@ -2072,7 +2689,7 @@ def export_invitees(org_uuid):
         output.seek(0)
         return send_file(
             output,
-            download_name="invitees_rccg.xlsx",
+            download_name=f"invitees_{datetime.utcnow()}.xlsx",
             as_attachment=True,
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
@@ -2090,30 +2707,6 @@ def export_invitees(org_uuid):
 
 
 ######################################################
-
-@app_.route('/login/<token>')
-def login_with_token(token):
-    email = verify_reset_token(token)
-    if not email:
-        flash("Invalid or expired login link.", "danger")
-        return redirect(url_for("inv.universal_login"))
-    
-    admin = Admin.query.filter_by(email=email).first_or_404()
-
-    if not admin:
-        flash("Admin account not found.", "danger")
-        return redirect(url_for("inv.universal_login"))
-
-    # login user
-    login_user(admin)
-    flash(f"Welcome back {admin.name}!.", "success")
-    event = Event.query.filter_by(organization_id=admin.organization.id).order_by(Event.start_time.desc()).first()
-    if event:
-        return redirect(url_for("inv.show_invitee_event", org_uuid=admin.organization.uuid, event_id=event.id))
-    else:
-        return redirect(url_for("inv.show_event_invitees", org_uuid=admin.organization.uuid))
-
-
 
 @app_.route('/<uuid:org_uuid>/register_admin', methods=['GET', 'POST'])
 @org_admin_or_super_required
@@ -2143,8 +2736,7 @@ def register_admin(org_uuid):
  
         password = form.password.data
 
-        
-        # Check for duplicates within the same org
+    
         # IMPORTANT: Consider if phone_number should be unique *per organization* or globally.
         # The current query checks for uniqueness within the organization scope for email and phone.
         existing_admin = Admin.query.filter(
@@ -2390,13 +2982,14 @@ def action_logs(org_uuid):
         return render_template('action_logs.html', message=f"An error occurred: {e}")
 
 
-@app_.route('/<uuid:org_uuid>/all_feedbacks')
+@app_.route('/<uuid:org_uuid>/<int:event_id>/all_feedbacks')
 # @org_admin_required
-def all_feedback(org_uuid):
+def all_feedback(org_uuid,event_id):
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+    event=Event.query.filter_by(id=event_id, organization_id=org.id).first_or_404()
     all_feedback = Feedback.query.filter_by(organization_id=org.id).all()
 
-    return render_template('all_feedbacks.html', org=org, org_uuid=org.uuid, all_feedback=all_feedback)
+    return render_template('all_feedbacks.html', org=org, org_uuid=org.uuid,event=event,event_id=event.id, all_feedback=all_feedback)
 
 ###################################################
 
@@ -2489,15 +3082,19 @@ def add_location(org_uuid):
     if request.method == 'POST':
         try:
             name = request.form.get('name')
-            # description = request.form.get('description', '')
+            description = request.form.get('description', '')
             address = request.form.get('address', '')
             latitude = float(request.form.get('latitude'))
             longitude = float(request.form.get('longitude'))
-            radius = int(request.form.get('radius', 100))
+            radius = int(request.form.get('radius',100))
             
             # Validation
             if not name:
                 flash('Location name is required', 'danger')
+                return redirect(request.url)
+            
+            if not (1 <= radius <= 100):
+                flash('Invalid Radius. Must be between 1 to 100 meters', 'danger')
                 return redirect(request.url)
             
             if not (-90 <= latitude <= 90):
@@ -2510,7 +3107,7 @@ def add_location(org_uuid):
             
             # Create new location
             location = Location(name=name,address=address,latitude=latitude, longitude=longitude,
-                radius=radius, organization_id=org.id, created_at=datetime.utcnow()
+                description=description,radius=radius, organization_id=org.id, created_at=datetime.utcnow()
             )
             
             db.session.add(location)
@@ -2563,7 +3160,7 @@ def edit_location(org_uuid, location_id):
     if request.method == 'POST':
         try:
             location.name = request.form.get('name')
-            # location.description = request.form.get('description', '')
+            location.description = request.form.get('description', '')
             location.address = request.form.get('address', '')
             location.latitude = float(request.form.get('latitude'))
             location.longitude = float(request.form.get('longitude'))
@@ -2573,6 +3170,10 @@ def edit_location(org_uuid, location_id):
             # Validation
             if not location.name:
                 flash('Location name is required', 'danger')
+                return redirect(request.url)
+            
+            if not (1 <= location.radius <= 100):
+                flash('Invalid Radius. Must be between 1 to 100 meters', 'danger')
                 return redirect(request.url)
             
             if not (-90 <= location.latitude <= 90):
@@ -2687,105 +3288,6 @@ def delete_location(org_uuid, location_id):
 
 
 # ############ events ################################################
-@app_.route('/<uuid:org_uuid>/add_event', methods=['GET', 'POST'])
-@org_admin_or_super_required # Your custom decorator to restrict to org admins
-def add_event(org_uuid):
-    
-    # 1. Get the target Organization based on the URL's org_uuid.
-    try:
-        org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
-    except Exception as e:
-        # current_app.logger.error(f"Error fetching organization for UUID {org_uuid}: {e}")
-        flash('Invalid organization identifier.', 'danger')
-        return redirect(url_for('inv.universal_login'))
-
-    # 2. Role-based Access Control
-    if current_user.is_super_admin:
-        pass
-    elif current_user.is_org_admin and current_user.organization_id == org.id:
-        pass # They are authorized to proceed.
-    else:
-        # Any other role (e.g., location_admin, standard user) or an Org Admin
-        flash('You do not have the required permissions to add events for this organization.', 'danger')
-        # Redirect to a safe, universal page or their authorized dashboard.
-        return redirect(url_for('inv.universal_login'))
-
-    if request.method == 'POST':
-        name = request.form.get('name', '').strip()
-        location_id = request.form.get('location_id')
-        start_time_str = request.form.get('start_time')
-        end_time_str = request.form.get('end_time')
-        is_active = request.form.get('is_active') == 'on'  # Checkbox handling
-
-        # Validation
-        if not name or not location_id or not start_time_str or not end_time_str:
-            flash("All fields are required.", "danger")
-            return redirect(url_for('inv.add_event', org_uuid=org.uuid))
-
-        try:
-            # Convert string dates to datetime objects
-            start_time = datetime.fromisoformat(start_time_str)
-            end_time = datetime.fromisoformat(end_time_str)
-        except ValueError:
-            flash("Invalid date format provided.", "danger")
-            return redirect(url_for('inv.add_event', org_uuid=org.uuid))
-
-        # Basic validation - check if end time is after start time
-        if end_time <= start_time:
-            flash("End time must be after start time.", "danger")
-            return redirect(url_for('inv.add_event', org_uuid=org.uuid))
-
-        # Convert location_id to integer and verify location belongs to this org
-        try:
-            location_id = int(location_id)
-            location = Location.query.filter_by(id=location_id, organization_id=org.id).first()
-            if not location:
-                flash("Invalid location selected.", "danger")
-                return redirect(url_for('inv.add_event', org_uuid=org.uuid))
-        except (ValueError, TypeError):
-            flash("Invalid location selected.", "danger")
-            return redirect(url_for('inv.add_event', org_uuid=org.uuid))
-
-        # Check if event with same name and location already exists for this organization
-        existing_event = Event.query.filter_by(
-            name=name, 
-            location_id=location_id, 
-            organization_id=org.id
-        ).first()
-        
-        if existing_event:
-            flash("An event with this name already exists at the selected location.", "danger")
-            return redirect(url_for('inv.add_event', org_uuid=org.uuid))
-
-        # Create event
-        try:
-            new_event = Event(
-                name=name,
-                location_id=location.id,
-                organization_id=org.id,
-                is_active=is_active,
-                start_time=start_time,
-                end_time=end_time
-                # created_by=current_user.id
-                # status='incoming'
-            )
-            db.session.add(new_event)
-            db.session.commit()
-
-            flash("Event created successfully.", "success")
-            return redirect(url_for('inv.add_event', org_uuid=org.uuid))
-            
-        except Exception as e:
-            db.session.rollback()
-            # current_app.logger.error(f"Error creating event: {e}")
-            flash("An error occurred while creating the event. Please try again.", "danger")
-            return redirect(url_for('inv.add_event', org_uuid=org.uuid))
-
-    # GET: Show form 
-    locations = Location.query.filter_by(organization_id=org.id, is_active=True).all()
-    return render_template('add_event.html', org=org, locations=locations)
-
-
 @app_.route('/<uuid:org_uuid>/events', methods=['GET'])
 @admin_or_super_required
 def view_event_detail(org_uuid):
@@ -2852,12 +3354,30 @@ def view_event_detail(org_uuid):
         flash('Error loading events. Please try again.', 'danger')
         events = events_query.paginate(page=1, per_page=per_page, error_out=False)
 
+    """"new generate/retrieve  QR  links"""
+    event_qr_map ={}
+    attendance_qr_map = {}
+
+    for event in events.items:
+        try:
+            qr_url = generate_event_qr(org_uuid, event.id)
+            event_qr_map[event.id] = qr_url
+
+            # Attendance QR (new)
+            qr_url_att = generate_attendance_qr(org_uuid, event.id)
+            attendance_qr_map[event.id] = qr_url_att
+
+        except Exception as e:
+            current_app.logger.error(f"QR generation fail: {e}")
+            event_qr_map[event.id] = None
+            attendance_qr_map[event.id] = None
+
     # Get summary statistics (optional)
     total_events = Event.query.filter_by(organization_id=org.id).count()
     active_events = Event.query.filter_by(organization_id=org.id, is_active=True).count()
     
     # Get upcoming events count (events that haven't ended yet)
-    from datetime import datetime
+     
     upcoming_events = Event.query.filter(
         Event.organization_id == org.id,
         Event.end_time > datetime.utcnow(),
@@ -2873,110 +3393,138 @@ def view_event_detail(org_uuid):
         search_query=search_query,
         total_events=total_events,
         active_events=active_events,
+        event_qr_map=event_qr_map,
+        attendance_qr_map= attendance_qr_map,
         upcoming_events=upcoming_events
     )
 
+# .....................edit and add event..........
 
-@app_.route('/<uuid:org_uuid>/events/<int:event_id>/edit', methods=['GET', 'POST'])
-@admin_or_super_required
-def edit_event(org_uuid, event_id):
-    """Edit an existing event"""
-    
-    # Get the organization
+@app_.route('/<uuid:org_uuid>/event', methods=['GET', 'POST'])
+@app_.route('/<uuid:org_uuid>/event/<int:event_id>', methods=['GET', 'POST'])
+@org_admin_or_super_required
+def add_event(org_uuid, event_id=None):
+    """Add or edit an event using the same form template (add_event.html)."""
     try:
         org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
-    except Exception as e:
+    except Exception:
         flash('Invalid organization identifier.', 'danger')
         return redirect(url_for('inv.universal_login'))
 
-    # Get the event
-    try:
-        event = Event.query.filter_by(
-            id=event_id, 
-            organization_id=org.id
-        ).first_or_404()
-    except Exception as e:
-        flash('Event not found.', 'danger')
-        return redirect(url_for('inv.view_event_detail', org_uuid=org.uuid))
-
-    # Role-based Access Control
-    if current_user.is_super_admin:
-        pass
-    elif current_user.is_org_admin and current_user.organization_id == org.id:
-        pass
-    else:
-        flash('You do not have the required permissions to edit this event.', 'danger')
+    # Role-based access
+    if not (current_user.is_super_admin or (current_user.is_org_admin and current_user.organization_id == org.id)):
+        flash('You do not have permission to manage events for this organization.', 'danger')
         return redirect(url_for('inv.universal_login'))
+
+    # If editing, fetch existing event
+    event = None
+    if event_id:
+        event = Event.query.filter_by(id=event_id, organization_id=org.id).first_or_404()
+
+    locations = Location.query.filter_by(organization_id=org.id, is_active=True).all()
 
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
         location_id = request.form.get('location_id')
+        description = request.form.get('description')
         start_time_str = request.form.get('start_time')
         end_time_str = request.form.get('end_time')
         is_active = request.form.get('is_active') == 'on'
+        image_file = request.files.get('event_logo')  # New upload field
 
-        # Validation
+        # --- Basic validation ---
         if not name or not location_id or not start_time_str or not end_time_str:
             flash("All fields are required.", "danger")
-            return redirect(url_for('inv.edit_event', org_uuid=org.uuid, event_id=event_id))
+            return redirect(request.url)
 
         try:
-            # Convert string dates to datetime objects
             start_time = datetime.fromisoformat(start_time_str)
             end_time = datetime.fromisoformat(end_time_str)
         except ValueError:
             flash("Invalid date format provided.", "danger")
-            return redirect(url_for('inv.edit_event', org_uuid=org.uuid, event_id=event_id))
+            return redirect(request.url)
 
-        # Validate time range
         if end_time <= start_time:
             flash("End time must be after start time.", "danger")
-            return redirect(url_for('inv.edit_event', org_uuid=org.uuid, event_id=event_id))
+            return redirect(request.url)
 
-        # Verify location
         try:
             location_id = int(location_id)
             location = Location.query.filter_by(id=location_id, organization_id=org.id).first()
             if not location:
                 flash("Invalid location selected.", "danger")
-                return redirect(url_for('inv.edit_event', org_uuid=org.uuid, event_id=event_id))
+                return redirect(request.url)
         except (ValueError, TypeError):
             flash("Invalid location selected.", "danger")
-            return redirect(url_for('inv.edit_event', org_uuid=org.uuid, event_id=event_id))
+            return redirect(request.url)
 
-        # Check for duplicate events (excluding current event)
-        existing_event = Event.query.filter(
-            Event.name == name,
-            Event.location_id == location_id,
-            Event.organization_id == org.id,
-            Event.id != event_id
-        ).first()
-        
-        if existing_event:
-            flash("An event with this name already exists at the selected location.", "danger")
-            return redirect(url_for('inv.edit_event', org_uuid=org.uuid, event_id=event_id))
-
-        # Update the event
+        # --- Create or Update Event ---
         try:
-            event.name = name
-            event.location_id = location_id
-            event.start_time = start_time
-            event.end_time = end_time
-            event.is_active = is_active
-            
-            db.session.commit()
-            flash("Event updated successfully.", "success")
-            return redirect(url_for('inv.view_event_detail', org_uuid=org.uuid))
-            
+            if event:  # Editing existing event
+                event.name = name
+                event.location_id = location_id
+                event.description = description
+                event.start_time = start_time
+                event.end_time = end_time
+                event.is_active = is_active
+
+                # Handle image upload
+                if image_file and image_file.filename != '':
+                    # Delete old image if it exists
+                    if event.event_logo_url:
+                        Config.delete_uploaded_image(event.event_logo_url)
+
+                    filename = Config.save_uploaded_image(image_file, prefix="event_")
+                    if filename:
+                        event.event_logo_url = filename
+
+                db.session.commit()
+                flash("Event updated successfully.", "success")
+                return redirect(url_for('inv.view_event_detail', org_uuid=org.uuid))
+
+            else:  # Creating a new event
+                # Check for duplicates
+                existing_event = Event.query.filter_by(
+                    name=name, location_id=location_id, organization_id=org.id
+                ).first()
+                if existing_event:
+                    flash("An event with this name already exists at the selected location.", "danger")
+                    return redirect(request.url)
+
+                filename = None
+                if image_file and image_file.filename != '':
+                    filename = Config.save_uploaded_image(image_file, prefix="event_")
+
+                new_event = Event(
+                    name=name,
+                    location_id=location_id,
+                    description=description,
+                    organization_id=org.id,
+                    start_time=start_time,
+                    end_time=end_time,
+                    is_active=is_active,
+                    event_logo_url=filename if filename else None
+                )
+
+                db.session.add(new_event)
+                db.session.commit()
+
+                flash("Event created successfully.", "success")
+                return redirect(url_for('inv.add_event', org_uuid=org.uuid))
+
         except Exception as e:
             db.session.rollback()
-            # current_app.logger.error(f"Error updating event: {e}")
-            flash("An error occurred while updating the event. Please try again.", "danger")
-            return redirect(url_for('inv.edit_event', org_uuid=org.uuid, event_id=event_id))
+            flash(f"An error occurred: {e}", "danger")
+            return redirect(request.url)
 
-    # GET: Show edit form
-    locations = Location.query.filter_by(organization_id=org.id, is_active=True).all()
-    return render_template('edit_event.html', org=org, event=event, locations=locations)
+    # --- GET Request ---
+    return render_template(
+        'add_event.html',
+        org=org,
+        event=event,
+        locations=locations,
+        mode='edit' if event_id else 'create'
+    )
 
 
 @app_.route('/<uuid:org_uuid>/events/<int:event_id>/delete', methods=['POST'])
@@ -3061,53 +3609,6 @@ def locations_api(org_uuid):
     return jsonify(locations_data)
 
 
-
-def fetch_lgas(state):
-    # Mock LGA data for each state
-    state_lgas = {
-    'Abia': ['Aba North', 'Aba South', 'Arochukwu', 'Bende', 'Ikwuano', 'Isiala Ngwa North', 'Isiala Ngwa South', 'Isuikwuato', 'Obi Ngwa', 'Ohafia', 'Osisioma', 'Ugwunagbo', 'Ukwa East', 'Ukwa West', 'Umuahia North', 'Umuahia South', 'Umu Nneochi'],
-    'Adamawa': ['Demsa', 'Fufore', 'Ganye', 'Gayuk', 'Gombi', 'Grie', 'Hong', 'Jada', 'Lamurde', 'Madagali', 'Maiha', 'Mayo-Belwa', 'Michika', 'Mubi North', 'Mubi South', 'Numan', 'Shelleng', 'Song', 'Toungo', 'Yola North', 'Yola South'],
-    'Akwa Ibom': ['Abak', 'Eastern Obolo', 'Eket', 'Esit Eket', 'Essien Udim', 'Etim Ekpo', 'Etinan', 'Ibeno', 'Ibesikpo Asutan', 'Ibiono Ibom', 'Ika', 'Ikono', 'Ikot Abasi', 'Ikot Ekpene', 'Ini', 'Itu', 'Mbo', 'Mkpat-Enin', 'Nsit-Atai', 'Nsit-Ibom', 'Nsit-Ubium', 'Obot Akara', 'Okobo', 'Onna', 'Oron', 'Oruk Anam', 'Udung-Uko', 'Ukanafun', 'Uruan', 'Urue-Offong/Oruko', 'Uyo'],
-    'Anambra': ['Aguata', 'Anambra East', 'Anambra West', 'Anaocha', 'Awka North', 'Awka South', 'Ayamelum', 'Dunukofia', 'Ekwusigo', 'Idemili North', 'Idemili South', 'Ihiala', 'Njikoka', 'Nnewi North', 'Nnewi South', 'Ogbaru', 'Onitsha North', 'Onitsha South', 'Orumba North', 'Orumba South', 'Oyi'],
-    'Bauchi': ['Alkaleri', 'Bauchi', 'Bogoro', 'Damban', 'Darazo', 'Dass', 'Gamawa', 'Ganjuwa', 'Giade', 'Itas/Gadau', 'Jama\'are', 'Katagum', 'Kirfi', 'Misau', 'Ningi', 'Shira', 'Tafawa Balewa', 'Toro', 'Warji', 'Zaki'],
-    'Bayelsa': ['Brass', 'Ekeremor', 'Kolokuma/Opokuma', 'Nembe', 'Ogbia', 'Sagbama', 'Southern Ijaw', 'Yenagoa'],
-    'Benue': ['Ado', 'Agatu', 'Apa', 'Buruku', 'Gboko', 'Guma', 'Gwer East', 'Gwer West', 'Katsina-Ala', 'Konshisha', 'Kwande', 'Logo', 'Makurdi', 'Obi', 'Ogbadibo', 'Ohimini', 'Oju', 'Okpokwu', 'Otukpo', 'Tarka', 'Ukum', 'Ushongo', 'Vandeikya'],
-    'Borno': ['Abadam', 'Askira/Uba', 'Bama', 'Bayo', 'Biu', 'Chibok', 'Damboa', 'Dikwa', 'Gubio', 'Guzamala', 'Gwoza', 'Hawul', 'Jere', 'Kaga', 'Kala/Balge', 'Konduga', 'Kukawa', 'Kwaya Kusar', 'Mafa', 'Magumeri', 'Maiduguri', 'Marte', 'Mobbar', 'Monguno', 'Ngala', 'Nganzai', 'Shani'],
-    'Cross River': ['Abi', 'Akamkpa', 'Akpabuyo', 'Bakassi', 'Bekwarra', 'Biase', 'Boki', 'Calabar Municipal', 'Calabar South', 'Etung', 'Ikom', 'Obanliku', 'Obubra', 'Obudu', 'Odukpani', 'Ogoja', 'Yakuur', 'Yala'],
-    'Delta': ['Aniocha North', 'Aniocha South', 'Bomadi', 'Burutu', 'Ethiope East', 'Ethiope West', 'Ika North East', 'Ika South', 'Isoko North', 'Isoko South', 'Ndokwa East', 'Ndokwa West', 'Okpe', 'Oshimili North', 'Oshimili South', 'Patani', 'Sapele', 'Udu', 'Ughelli North', 'Ughelli South', 'Ukwuani', 'Uvwie', 'Warri North', 'Warri South', 'Warri South West'],
-    'Ebonyi': ['Abakaliki', 'Afikpo North', 'Afikpo South (Edda)', 'Ebonyi', 'Ezza North', 'Ezza South', 'Ikwo', 'Ishielu', 'Ivo', 'Izzi', 'Ohaozara', 'Ohaukwu', 'Onicha'],
-    'Edo': ['Akoko-Edo', 'Egor', 'Esan Central', 'Esan North-East', 'Esan South-East', 'Esan West', 'Etsako Central', 'Etsako East', 'Etsako West', 'Igueben', 'Ikpoba-Okha', 'Oredo', 'Orhionmwon', 'Ovia North-East', 'Ovia South-West', 'Owan East', 'Owan West', 'Uhunmwonde'],
-    'Ekiti': ['Ado Ekiti', 'Efon', 'Ekiti East', 'Ekiti South-West', 'Ekiti West', 'Emure', 'Gbonyin', 'Ido Osi', 'Ijero', 'Ikere', 'Ikole', 'Ilejemeje', 'Irepodun/Ifelodun', 'Ise/Orun', 'Moba', 'Oye'],
-    'Enugu': ['Aninri', 'Awgu', 'Enugu East', 'Enugu North', 'Enugu South', 'Ezeagu', 'Igbo Etiti', 'Igbo Eze North', 'Igbo Eze South', 'Isi Uzo', 'Nkanu East', 'Nkanu West', 'Nsukka', 'Oji River', 'Udenu', 'Udi', 'Uzo Uwani'],
-    'Gombe': ['Akko', 'Balanga', 'Billiri', 'Dukku', 'Funakaye', 'Gombe', 'Kaltungo', 'Kwami', 'Nafada', 'Shongom', 'Yamaltu/Deba'],
-    'Imo': ['Aboh Mbaise', 'Ahiazu Mbaise', 'Ehime Mbano', 'Ezinihitte', 'Ideato North', 'Ideato South', 'Ihitte/Uboma', 'Ikeduru', 'Isiala Mbano', 'Isu', 'Mbaitoli', 'Ngor Okpala', 'Njaba', 'Nkwerre', 'Nwangele', 'Obowo', 'Oguta', 'Ohaji/Egbema', 'Okigwe', 'Onuimo', 'Orlu', 'Orsu', 'Oru East', 'Oru West', 'Owerri Municipal', 'Owerri North', 'Owerri West'],
-    'Jigawa': ['Auyo', 'Babura', 'Biriniwa', 'Birnin Kudu', 'Buji', 'Dutse', 'Gagarawa', 'Garki', 'Gumel', 'Guri', 'Gwaram', 'Gwiwa', 'Hadejia', 'Jahun', 'Kafin Hausa', 'Kaugama', 'Kazaure', 'Kiri Kasama', 'Kiyawa', 'Maigatari', 'Malam Madori', 'Miga', 'Ringim', 'Roni', 'Sule Tankarkar', 'Taura', 'Yankwashi'],
-    'Kaduna': ['Birnin Gwari', 'Chikun', 'Giwa', 'Igabi', 'Ikara', 'Jaba', 'Jema\'a', 'Kachia', 'Kaduna North', 'Kaduna South', 'Kagarko', 'Kajuru', 'Kaura', 'Kauru', 'Kubau', 'Kudan', 'Lere', 'Makarfi', 'Sabon Gari', 'Sanga', 'Soba', 'Zangon Kataf', 'Zaria'],
-    'Kano': ['Ajingi', 'Albasu', 'Bagwai', 'Bebeji', 'Bichi', 'Bunkure', 'Dala', 'Dambatta', 'Dawakin Kudu', 'Dawakin Tofa', 'Doguwa', 'Fagge', 'Gabasawa', 'Garko', 'Garun Mallam', 'Gaya', 'Gezawa', 'Gwale', 'Gwarzo', 'Kabo', 'Kano Municipal', 'Karaye', 'Kibiya', 'Kiru', 'Kumbotso', 'Kunchi', 'Kura', 'Madobi', 'Makoda', 'Minjibir', 'Nasarawa', 'Rano', 'Rimin Gado', 'Rogo', 'Shanono', 'Sumaila', 'Takai', 'Tarauni', 'Tofa', 'Tsanyawa', 'Tudun Wada', 'Ungogo', 'Warawa', 'Wudil'],
-    'Katsina': ['Bakori', 'Batagarawa', 'Batsari', 'Baure', 'Bindawa', 'Charanchi', 'Dandume', 'Danja', 'Dan Musa', 'Daura', 'Dutsi', 'Dutsin Ma', 'Faskari', 'Funtua', 'Ingawa', 'Jibia', 'Kafur', 'Kaita', 'Kankara', 'Kankia', 'Katsina', 'Kurfi', 'Kusada', 'Mai\'Adua', 'Malumfashi', 'Mani', 'Mashi', 'Matazu', 'Musawa', 'Rimi', 'Sabuwa', 'Safana', 'Sandamu', 'Zango'],
-    'Kebbi': ['Aleiro', 'Arewa Dandi', 'Argungu', 'Augie', 'Bagudo', 'Birnin Kebbi', 'Bunza', 'Dandi', 'Fakai', 'Gwandu', 'Jega', 'Kalgo', 'Koko/Besse', 'Maiyama', 'Ngaski', 'Sakaba', 'Shanga', 'Suru', 'Danko/Wasagu', 'Yauri', 'Zuru'],
-    'Kogi': ['Adavi', 'Ajaokuta', 'Ankpa', 'Bassa', 'Dekina', 'Ibaji', 'Idah', 'Igalamela Odolu', 'Ijumu', 'Kabba/Bunu', 'Kogi', 'Lokoja', 'Mopa-Muro', 'Ofu', 'Ogori/Magongo', 'Okehi', 'Okene', 'Olamaboro', 'Omala', 'Yagba East', 'Yagba West'],
-    'Kwara': ['Asa', 'Baruten', 'Edu', 'Ekiti', 'Ifelodun', 'Ilorin East', 'Ilorin South', 'Ilorin West', 'Irepodun', 'Isin', 'Kaiama', 'Moro', 'Offa', 'Oke Ero', 'Oyun', 'Pategi'],
-    'Lagos': ['Agege', 'Ajeromi-Ifelodun', 'Alimosho', 'Amuwo-Odofin', 'Apapa', 'Badagry', 'Epe', 'Eti-Osa', 'Ibeju-Lekki', 'Ifako-Ijaiye', 'Ikeja', 'Ikorodu', 'Kosofe', 'Lagos Island', 'Lagos Mainland', 'Mushin', 'Ojo', 'Oshodi-Isolo', 'Shomolu', 'Surulere'],
-    'Nasarawa': ['Akwanga', 'Awe', 'Doma', 'Karu', 'Keana', 'Keffi', 'Kokona', 'Lafia', 'Nasarawa', 'Nasarawa Egon', 'Obi', 'Toto', 'Wamba'],
-    'Niger': ['Agaie', 'Agwara', 'Bida', 'Borgu', 'Bosso', 'Chanchaga', 'Edati', 'Gbako', 'Gurara', 'Katcha', 'Kontagora', 'Lapai', 'Lavun', 'Magama', 'Mariga', 'Mashegu', 'Mokwa', 'Muya', 'Paikoro', 'Rafi', 'Rijau', 'Shiroro', 'Suleja', 'Tafa', 'Wushishi'],
-    'Ogun': ['Abeokuta North', 'Abeokuta South', 'Ado-Odo/Ota', 'Ewekoro', 'Ifo', 'Ijebu East', 'Ijebu North', 'Ijebu North East', 'Ijebu Ode', 'Ikenne', 'Imeko Afon', 'Ipokia', 'Obafemi Owode', 'Odeda', 'Odogbolu', 'Ogun Waterside', 'Remo North', 'Shagamu', 'Yewa North', 'Yewa South'],
-    'Ondo': ['Akoko North-East', 'Akoko North-West', 'Akoko South-East', 'Akoko South-West', 'Akure North', 'Akure South', 'Ese Odo', 'Idanre', 'Ifedore', 'Ilaje', 'Ile Oluji/Okeigbo', 'Irele', 'Odigbo', 'Okitipupa', 'Ondo East', 'Ondo West', 'Ose', 'Owo'],
-    'Osun': ['Aiyedaade', 'Aiyedire', 'Atakunmosa East', 'Atakunmosa West', 'Boluwaduro', 'Boripe', 'Ede North', 'Ede South', 'Egbedore', 'Ejigbo', 'Ife Central', 'Ife East', 'Ife North', 'Ife South', 'Ifedayo', 'Ifelodun', 'Ila', 'Ilesha East', 'Ilesha West', 'Irepodun', 'Irewole', 'Isokan', 'Iwo', 'Obokun', 'Odo Otin', 'Ola Oluwa', 'Olorunda', 'Oriade', 'Orolu', 'Osogbo'],
-    'Oyo': ['Afijio', 'Akinyele', 'Atiba', 'Atisbo', 'Egbeda', 'Ibadan North', 'Ibadan North-East', 'Ibadan North-West', 'Ibadan South-East', 'Ibadan South-West', 'Ibarapa Central', 'Ibarapa East', 'Ibarapa North', 'Ido', 'Irepo', 'Iseyin', 'Itesiwaju', 'Iwajowa', 'Kajola', 'Lagelu', 'Ogo Oluwa', 'Ogbomosho North', 'Ogbomosho South', 'Olorunsogo', 'Oluyole', 'Ona Ara', 'Orelope', 'Ori Ire', 'Oyo East', 'Oyo West', 'Saki East', 'Saki West', 'Surulere'],
-    'Plateau': ['Barkin Ladi', 'Bassa', 'Bokkos', 'Jos East', 'Jos North', 'Jos South', 'Kanam', 'Kanke', 'Langtang North', 'Langtang South', 'Mangu', 'Mikang', 'Pankshin', 'Qua\'an Pan', 'Riyom', 'Shendam', 'Wase'],
-    'Rivers': ['Abua/Odual', 'Ahoada East', 'Ahoada West', 'Akuku Toru', 'Andoni', 'Asari-Toru', 'Bonny', 'Degema', 'Eleme', 'Emohua', 'Etche', 'Gokana', 'Ikwerre', 'Khana', 'Obio-Akpor', 'Ogba/Egbema/Ndoni', 'Ogu/Bolo', 'Okrika', 'Omuma', 'Opobo/Nkoro', 'Oyigbo', 'Port Harcourt', 'Tai'],
-    'Sokoto': ['Binji', 'Bodinga', 'Dange Shuni', 'Gada', 'Goronyo', 'Gudu', 'Gwadabawa', 'Illela', 'Isa', 'Kebbe', 'Kware', 'Rabah', 'Sabon Birni', 'Shagari', 'Silame', 'Sokoto North', 'Sokoto South', 'Tambuwal', 'Tangaza', 'Tureta', 'Wamako', 'Wurno', 'Yabo'],
-    'Taraba': ['Ardo Kola', 'Bali', 'Donga', 'Gashaka', 'Gassol', 'Ibi', 'Jalingo', 'Karim Lamido', 'Kurmi', 'Lau', 'Sardauna', 'Takum', 'Ussa', 'Wukari', 'Yorro', 'Zing'],
-    'Yobe': ['Bade', 'Bursari', 'Damaturu', 'Fika', 'Fune', 'Geidam', 'Gujba', 'Gulani', 'Jakusko', 'Karasuwa', 'Machina', 'Nangere', 'Nguru', 'Potiskum', 'Tarmuwa', 'Yunusari', 'Yusufari'],
-    'Zamfara': ['Anka', 'Bakura', 'Birnin Magaji/Kiyaw', 'Bukkuyum', 'Bungudu', 'Chafe', 'Gummi', 'Gusau', 'Kaura Namoda', 'Maradun', 'Maru', 'Shinkafi', 'Talata Mafara', 'Zurmi'],
-    'Fct': ['Abaji', 'Bwari', 'Gwagwalada', 'Kuje', 'Kwali', 'Municipal Area Council (AMAC)'],
-    'Intl': ['Diaspora'],
-   
-}
-    
-    return state_lgas.get(state, [])
-
 ###########################################################
 
 @app_.route('/get_lgas', methods=['GET'])
@@ -3125,60 +3626,81 @@ def get_lgas():
 
 @app_.route('/<uuid:org_uuid>/forgot_password', methods=['GET', 'POST'])
 def forgot_password_request(org_uuid):
-
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
-    
-    # If the user is already logged in, no need to reset password
-    if current_user.is_authenticated:
-        return redirect(url_for('inv.login',org_uuid=org.uuid))  # Replace with your default logged-in page
 
-    form = RequestResetForm() # This form will just have an email field
+    # If the user is already logged in
+    if current_user.is_authenticated:
+        if hasattr(current_user, 'invitee') and current_user.invitee:
+            return redirect(url_for('inv.invitee_manual_login', org_uuid=org.uuid))
+        return redirect(url_for('inv.invitee_manual_login', org_uuid=org.uuid))
+
+    form = RequestResetForm()  # This form should just have an email field
 
     if form.validate_on_submit():
+        # First, try to find admin
         admin = Admin.query.filter_by(email=form.email.data).first()
-        if admin:
-            token = generate_reset_token(admin.email)
-            send_password_reset_email(admin.email, token)
+        invitee = Invitee.query.filter_by(email=form.email.data).first()
+
+        if admin or invitee:
+            user_email = admin.email if admin else invitee.email
+            token = generate_reset_token(user_email)
+
+            # Send different emails depending on who they are
+            if admin:
+                send_password_reset_email(user_email, org_uuid, token)
+            else:
+                send_password_reset_email(user_email, token, org_uuid)
+                flash('A password reset link has been sent to your email.', 'info')
+                return redirect(url_for('inv.invitee_manual_login', org_uuid=org.uuid))
+
             flash('A password reset link has been sent to your email.', 'info')
         else:
-            # Send a generic message to prevent email enumeration
             flash('If an account with that email exists, a password reset link has been sent.', 'info')
-        return redirect(url_for('inv.login',org_uuid=org.uuid)) # Redirect to login or a static info page
 
-    return render_template('forgot_password_request.html', form=form,org=org)
+        return redirect(url_for('inv.login', org_uuid=org.uuid))
+
+    return render_template('forgot_password_request.html', form=form, org=org)
+
 
 
 @app_.route('/reset_password/<token>', methods=['GET', 'POST'])
 def reset_password(token):
-
-    # org = Organization.query.filter_by(uuid=org.uuid).first_or_404()
+    # Get all orgs for context (you might use this in your template)
     org = Organization.query.all()
+
     # If the user is already logged in, no need to reset password
     if current_user.is_authenticated:
-        return redirect(url_for('inv.login'))
+        return redirect(url_for('inv.login', org_uuid=org[0].uuid if org else None))
 
+    # Verify token
     email = verify_reset_token(token)
     if email is None:
         flash('That is an invalid or expired token.', 'warning')
-        return redirect(url_for('inv.forgot_password_request'))
+        return redirect(url_for('inv.forgot_password_request', org_uuid=org[0].uuid if org else None))
 
+    # Try to find either Admin or Invitee by email
     admin = Admin.query.filter_by(email=email).first()
-    if not admin: # Should not happen if token verification worked, but as a safeguard
-        flash('Account not found.', 'danger')
-        return redirect(url_for('inv.forgot_password_request'))
+    invitee = Invitee.query.filter_by(email=email).first()
 
-    form = ResetPasswordForm() # This form will have password and confirm_password fields
+    user = admin or invitee
+    if not user:
+        flash('Account not found.', 'danger')
+        return redirect(url_for('inv.forgot_password_request', org_uuid=org[0].uuid if org else None))
+
+    form = ResetPasswordForm()
 
     if form.validate_on_submit():
-        admin.set_password(form.password.data) # Use the set_password method
+        # Assuming both models have a set_password() method
+        user.set_password(form.password.data)
         db.session.commit()
         flash('Your password has been updated! You can now log in.', 'success')
-        return redirect(url_for('inv.universal_login')) # Redirect to login
 
-    return render_template('reset_password.html', form=form, token=token,org=org)
-
-
-
+        # Redirect logic based on role
+        if isinstance(user, Invitee):
+            return redirect(url_for('inv.universal_login', org_uuid=org[0].uuid if org else None))
+        else:
+            return redirect(url_for('inv.universal_login', org_uuid=org[0].uuid if org else None))
+    return render_template('reset_password.html', form=form, token=token, org=org)
 
 
 
@@ -3269,33 +3791,3 @@ def invitation_confirm(token):
     # If it's a GET request and the token is valid, show the form
     return render_template('emails/invitation_confirm.html', invitation=invitation, token=token,org=org)
 
-
-
-# def send_qr_code_email(invitee, invite_id):
-#     try:
-#         success_page_url = f"https://fac.scrollintl.com/success/{invitee.id}"
-        
-#         msg = Message(
-#             "Your RCCG QR Code",
-#             sender="fac@fac.scrollintl.com",
-#             recipients=[invitee.email]
-#         )
-#         msg.html = f"""
-#         <p>Dear {invitee.name},</p>
-#         <p>Thank you for registering. Click the button below to view your QR code:</p>
-#           <br></br>
-        
-#           <p><a href="{success_page_url}"></a></p>
-        
-#          <p><a href="{success_page_url}" style="padding: 10px 20px; background-color: #28a745; color: white; text-decoration: none; border-radius: 5px;">View Your QR Code</a></p>
-#         <br></br>
-#         <p>Please this QR code will be needed to confirm your attendance, or you can scan QR shared with you at Living Stone Parish, Behind 5 Fingers,Tunga Minna.</p>
-#         <p>Thank you.</p>
-#         <p>NIGER 1 RCCG Team.</p>
-#         """
-#         mail.send(msg)
-#         print("Email sent successfully!")
-
-#     except smtplib.SMTPException as e:
-#         print(f"Error sending email: {e}")
-#         raise e

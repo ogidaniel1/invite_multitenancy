@@ -3,20 +3,19 @@
 {% block title %}Register Admin{% endblock %}
 
 {% block content %}
-<div class="container mt-5">
+<div class="container my-4">
     <div class="row justify-content-center">
         <div class="col-md-8 col-lg-6">
-            <div class="card shadow-sm">
-                <div class="card-header bg-primary text-white text-center py-3">
+            <div class="card shadow border-0 rounded-4">
+                <div class="card-header bg-gradient bg-primary text-white text-center py-4">
 
                     {% if org.logo_url %}
-                    <img src="{{ url_for('static', filename='images/' + org.logo_url) }}" alt="Logo"
-                        style="max-width: 70px;" class="mb-2">
+                    <img src="{{ url_for('static', filename='images/' + org.logo_url) }}" alt="{{ org.name }} Logo"
+                        class="img-fluid rounded-4 mb-2" style="max-width: 70px;">
                     {% else %}
-                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="DanwebIT Logo"
-                        style="max-width: 70px;" class="mb-2">
+                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Default Logo"
+                        class="img-fluid rounded-4 mb-2" style="max-width: 70px;">
                     {% endif %}
-
                     <h4 class="mt-2">Register Admin</h4>
 
                 </div>
@@ -65,7 +64,8 @@
 
                             <div class="form-floating mb-3">
                                 {# Using form.gender directly handles the select field if defined in WTForms #}
-                                {{ form.gender(class="form-select", placeholder=form.gender.label.text, aria_label="Gender") }}
+                                {{ form.gender(class="form-select", placeholder=form.gender.label.text,
+                                aria_label="Gender") }}
                                 <label for="gender">{{ form.gender.label }}</label>
                                 {% if form.gender.errors %}
                                 <div class="invalid-feedback d-block">
@@ -85,7 +85,7 @@
                                     {% for error in form.phone_number.errors %}
                                     {{ error }}
                                     {% endfor %}
-                                    </div>
+                                </div>
                                 {% endif %}
                             </div>
 
@@ -105,7 +105,8 @@
 
                             <div class="form-floating mb-3">
                                 {# Using form.role directly handles the select field if defined in WTForms #}
-                                {{ form.role(class="form-select", placeholder=form.role.label.text, aria_label="Role") }}
+                                {{ form.role(class="form-select", placeholder=form.role.label.text, aria_label="Role")
+                                }}
                                 <label for="role">{{ form.role.label }}</label>
                                 {% if form.role.errors %}
                                 <div class="invalid-feedback d-block">
@@ -117,9 +118,10 @@
                             </div>
 
                             <!-- hhhhh -->
-                             <div class="form-floating mb-3">
+                            <div class="form-floating mb-3">
                                 {# Using form.location_id directly handles the select field if defined in WTForms #}
-                                {{ form.location_id(class="form-select", placeholder=form.location_id.label.text, aria_label="Location") }}
+                                {{ form.location_id(class="form-select", placeholder=form.location_id.label.text,
+                                aria_label="Location") }}
                                 <label for="location_id">{{ form.location_id.label }}</label>
                                 {% if form.location_id.errors %}
                                 <div class="invalid-feedback d-block">
@@ -144,7 +146,8 @@
                             </div>
 
                             <div class="form-floating mb-3">
-                                {{ form.confirm_password(class="form-control", placeholder=form.confirm_password.label.text) }}
+                                {{ form.confirm_password(class="form-control",
+                                placeholder=form.confirm_password.label.text) }}
                                 <label for="confirm_password">{{ form.confirm_password.label }}</label>
                                 {% if form.confirm_password.errors %}
                                 <div class="invalid-feedback d-block">

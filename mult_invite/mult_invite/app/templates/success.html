@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Registration Successful</title>
   <style>
     body {
@@ -97,34 +98,44 @@
     }
   </style>
 </head>
+
 <body>
   <div class="container">
     <header>
-        {% if org.logo_url %}
-          <img src="{{ url_for('static', filename='images/' + org.logo_url) }}" alt="{{ org.name }} Logo"
-              class="img-fluid" style="max-width: 100px;">
-          {% else %}
-          <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Default Logo"
-              class="img-fluid" style="max-width: 100px;">
-          {% endif %}   
+      {% if org.logo_url %}
+      <img src="{{ url_for('static', filename='images/' + org.logo_url) }}" alt="{{ org.name }} Logo"
+        class="img-fluid rounded-4 mb-2" style="max-width: 100px;">
+      {% else %}
+      <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Default Logo" class="img-fluid rounded-4 mb-2"
+        style="max-width: 100px;">
+      {% endif %}
 
     </header>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
-      {% for category, message in messages %}
-        <div class="alert alert-{{ 'error' if category == 'error' else category }}">
-          {{ message }}
-        </div>
-      {% endfor %}
+    {% for category, message in messages %}
+    <div class="alert alert-{{ 'error' if category == 'error' else category }}">
+      {{ message }}
+    </div>
+    {% endfor %}
     {% endif %}
     {% endwith %}
 
     <p class="message {{ status }}">{{ message }}</p>
-      {{event.name }}
+
+    {% if event.event_logo_url %}
+    <img src="{{ url_for('static', filename='images/' ~ event.event_logo_url) }}" alt="{{ org.name }} Logo"
+      class="img-fluid rounded-3" style="max-width: 150px;">
+    {% else %}
+    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Default Logo" class="img-fluid rounded-3"
+      style="max-width: 150px;">
+    {% endif %}
+
     <img src="data:image/png;base64,{{ qr_code_path }}" alt="QR Code" />
     <br />
     <a href="{{ url_for('inv.register',org_uuid=org.uuid) }}">Register</a>
   </div>
 </body>
+
 </html>

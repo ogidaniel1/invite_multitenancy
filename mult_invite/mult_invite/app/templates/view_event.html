@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-
 {% block title %}Events - {{ org.name }}{% endblock %}
 
 {% block content %}
@@ -28,22 +27,22 @@
                             <table class="table table-hover">
                                 <thead class="table-light">
                                     <tr>
-                                        <th scope="col">#</th>
-                                        <th scope="col">Event Name</th>
-                                        <th scope="col">Location</th>
-                                        <th scope="col">Start Date & Time</th>
-                                        <th scope="col">End Date & Time</th>
-                                        <th scope="col">Status</th>
-                                        <th scope="col" class="text-center">Actions</th>
+                                        <th>#</th>
+                                        <th>Event Name</th>
+                                        <th>Location</th>
+                                        <th>Start Date & Time</th>
+                                        <th>End Date & Time</th>
+                                        <th>Status</th>
+                                        <th>QR Invite</th>
+                                        <th>QR Attendance</th>
+                                        <th class="text-center">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% for event in events %}
                                     <tr>
                                         <td>{{ loop.index }}</td>
-                                        <td>
-                                            <strong>{{ event.name }}</strong>
-                                        </td>
+                                        <td><strong>{{ event.name }}</strong></td>
                                         <td>
                                             <i class="fas fa-map-marker-alt text-muted me-1"></i>
                                             {{ event.location.name }}
@@ -64,60 +63,50 @@
                                             {% endif %}
                                         </td>
                                         <td class="text-center">
+                                            {% if event_qr_map[event.id] %}
+                                                <a href="{{ event_qr_map[event.id] }}" target="_blank" title="View invite QR" download="{{ event_qr_map[event.id] }}.png">
+                                                    <img src="{{ event_qr_map[event.id] }}" alt="QR" width="45" height="45">
+                                                </a>
+                                            {% else %}
+                                                <span class="text-muted">N/A</span>
+                                            {% endif %}
+                                        </td>
+
+                                        <td class="text-center">
+                                        {% if attendance_qr_map[event.id] %}
+                                            <a href="{{ attendance_qr_map[event.id] }}" target="_blank" title="View Attendance QR" download="attendance_qr_event_{{ event.id }}.png">
+                                                <img src="{{ attendance_qr_map[event.id] }}" alt="Attendance QR" width="45" height="45">
+                                            </a>
+                                        {% else %}
+                                            <span class="text-muted">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                        <td class="text-center">
                                             <div class="btn-group" role="group" aria-label="Event actions">
-                                                <a href="{{ url_for('inv.edit_event', org_uuid=org.uuid, event_id=event.id) }}"
+                                                <a href="{{ url_for('inv.add_event', org_uuid=org.uuid, event_id=event.id) }}"
                                                     class="btn btn-sm btn-outline-primary px-2" title="Edit Event">
                                                     <i class="fas fa-edit me-1"></i> Edit
                                                 </a>
-                                                <button type="button" class="btn btn-sm btn-outline-danger px-2" data-bs-toggle="modal"
-                                                    data-bs-target="#deleteModal{{ event.id }}" title="Delete Event">
+                                                <button type="button"
+                                                    class="btn btn-sm btn-outline-danger px-2"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#deleteModal"
+                                                    data-event-id="{{ event.id }}"
+                                                    data-event-name="{{ event.name }}"
+                                                    data-event-location="{{ event.location.name }}"
+                                                    data-start="{{ event.start_time.strftime('%Y-%m-%d %I:%M %p')}}"
+                                                    data-end="{{ event.end_time.strftime('%Y-%m-%d %I:%M %p') }}"
+                                                    title="Delete Event">
                                                     <i class="fas fa-trash me-1"></i> Delete
                                                 </button>
                                             </div>
-
-
-                                    <!-- Delete Confirmation Modal -->
-                                    <div class="modal fade" id="deleteModal{{ event.id }}" tabindex="-1" 
-                                         aria-labelledby="deleteModalLabel{{ event.id }}" aria-hidden="true">
-                                        <div class="modal-dialog">
-                                            <div class="modal-content">
-                                                <div class="modal-header">
-                                                    <h5 class="modal-title" id="deleteModalLabel{{ event.id }}">
-                                                        Confirm Delete
-                                                    </h5>
-                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                                </div>
-                                                <div class="modal-body">
-                                                    <p>Are you sure you want to delete the event <strong>"{{ event.name }}"</strong>?</p>
-                                                    <div class="alert alert-warning">
-                                                        <i class="fas fa-exclamation-triangle me-1"></i>
-                                                        This action cannot be undone.
-                                                    </div>
-                                                    <p><strong>Event Details:</strong></p>
-                                                    <ul class="list-unstyled ms-3">
-                                                        <li><strong>Location:</strong> {{ event.location.name }}</li>
-                                                        <li><strong>Start:</strong> {{ event.start_time.strftime('%Y-%m-%d %I:%M %p') }}</li>
-                                                        <li><strong>End:</strong> {{ event.end_time.strftime('%Y-%m-%d %I:%M %p') }}</li>
-                                                    </ul>
-                                                </div>
-                                                <div class="modal-footer">
-                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                    <form method="POST" action="{{ url_for('inv.delete_event', org_uuid=org.uuid, event_id=event.id) }}" class="d-inline">
-                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                        <button type="submit" class="btn btn-danger">
-                                                            <i class="fas fa-trash me-1"></i>Delete Event
-                                                        </button>
-                                                    </form>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                        </td>
+                                    </tr>
                                     {% endfor %}
                                 </tbody>
                             </table>
                         </div>
 
-                        <!-- Pagination (if needed) -->
                         {% if events.pages > 1 %}
                         <nav aria-label="Events pagination" class="mt-4">
                             <ul class="pagination justify-content-center">
@@ -128,7 +117,6 @@
                                         </a>
                                     </li>
                                 {% endif %}
-                                
                                 {% for page_num in events.iter_pages() %}
                                     {% if page_num %}
                                         {% if page_num != events.page %}
@@ -141,12 +129,9 @@
                                             </li>
                                         {% endif %}
                                     {% else %}
-                                        <li class="page-item disabled">
-                                            <span class="page-link">...</span>
-                                        </li>
+                                        <li class="page-item disabled"><span class="page-link">...</span></li>
                                     {% endif %}
                                 {% endfor %}
-                                
                                 {% if events.has_next %}
                                     <li class="page-item">
                                         <a class="page-link" href="{{ url_for('inv.view_event', org_uuid=org.uuid, page=events.next_num) }}">
@@ -157,7 +142,6 @@
                             </ul>
                         </nav>
                         {% endif %}
-
                     {% else %}
                         <div class="text-center py-5">
                             <div class="mb-4">
@@ -176,16 +160,70 @@
     </div>
 </div>
 
+<!-- Global Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="deleteModalText"></p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    This action cannot be undone.
+                </div>
+                <ul class="list-unstyled ms-3" id="deleteModalDetails"></ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteForm" method="POST" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash me-1"></i>Delete Event
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-    // Auto-dismiss alerts after 5 seconds
-    document.addEventListener('DOMContentLoaded', function() {
-        const alerts = document.querySelectorAll('.alert:not(.alert-danger)');
-        alerts.forEach(function(alert) {
-            setTimeout(function() {
-                const bsAlert = new bootstrap.Alert(alert);
-                bsAlert.close();
-            }, 5000);
-        });
+document.addEventListener("DOMContentLoaded", function () {
+    const orgUUID = "{{ org.uuid }}";  // ✅ Injected by Jinja safely
+
+    // Auto-dismiss alerts (not inside modals)
+    document.querySelectorAll('.alert:not(.alert-danger)').forEach(alert => {
+        if (!alert.closest('.modal')) {
+            setTimeout(() => new bootstrap.Alert(alert).close(), 5000);
+        }
     });
+
+    // Delete Modal Handler
+    const deleteModal = document.getElementById('deleteModal');
+    if (deleteModal) {
+        deleteModal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const eventId = button.getAttribute('data-event-id');
+            const eventName = button.getAttribute('data-event-name');
+            const location = button.getAttribute('data-event-location');
+            const start = button.getAttribute('data-start');
+            const end = button.getAttribute('data-end');
+
+            document.getElementById('deleteModalText').innerHTML =
+                `Are you sure you want to delete the event <strong>"${eventName}"</strong>?`;
+            document.getElementById('deleteModalDetails').innerHTML = `
+                <li><strong>Location:</strong> ${location}</li>
+                <li><strong>Start:</strong> ${start}</li>
+                <li><strong>End:</strong> ${end}</li>
+            `;
+
+            const deleteForm = document.getElementById('deleteForm');
+            deleteForm.action = `/${orgUUID}/events/${eventId}/delete`; // Correct, no placeholder issues
+        });
+    }
+});
 </script>
+
 {% endblock %}

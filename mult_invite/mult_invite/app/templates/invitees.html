@@ -104,7 +104,7 @@
 
                     <div class="mt-3 mb-4">
                         <div class="d-flex flex-wrap gap-2">
-                            <a href="{{ url_for('inv.all_feedback',org_uuid=org.uuid) }}" class="btn btn-outline-info">
+                            <a href="{{ url_for('inv.all_feedback',org_uuid=org.uuid,event_id=event.id) }}" class="btn btn-outline-info">
                                 <i class="bi bi-chat-square-text"></i> Feedback List
                             </a>
                             <a href="{{ url_for('inv.feedback_chart',org_uuid=org.uuid) }}"

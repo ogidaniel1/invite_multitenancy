@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}My Event Profile{% endblock %}
+{% block header_title %}Welcome, {{ invitee.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 px-3">
+    <div class="card shadow-lg border-0 rounded-4">
+        <div class="card-header bg-gradient bg-primary text-white rounded-top-4">
+            <h4 class="mb-0"><i class="bi bi-calendar-event"></i> My Event Dashboard</h4>
+        </div>
+        <div class="card-body bg-light">
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endfor %}
+            {% endif %}
+            {% endwith %}
+
+            <!-- Registered Events -->
+            <h5 class="fw-bold mb-3 text-success"><i class="bi bi-check-circle"></i> Events You’ve Registered For</h5>
+            {% if registered_events %}
+            <div class="row row-cols-1 row-cols-md-2 g-4 mb-4">
+                {% for event in registered_events %}
+                <div class="col">
+                    <div class="card border-success border-2 shadow-sm h-100">
+                        <div class="card-body">
+                            <h5 class="card-title text-success">{{ event.name }}</h5>
+                            <p class="card-text text-muted">{{ (event.description or '')[:120] }}... </p>
+                            <p><strong>Start:</strong> {{ event.start_time.strftime('%b %d, %Y') }}</p>
+                            <p><strong>End:</strong> {{ event.end_time.strftime('%b %d, %Y') }}</p>
+                            <span class="badge bg-success px-3 py-2">Registered</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted mb-4">You haven’t registered for any event yet.</p>
+            {% endif %}
+
+            <!-- Attended Events -->
+            <h5 class="fw-bold mb-3 text-primary"><i class="bi bi-award"></i> Events You’ve Attended</h5>
+            {% if attended_events %}
+            <div class="row row-cols-1 row-cols-md-2 g-4 mb-4">
+                {% for event in attended_events %}
+                <div class="col">
+                    <div class="card border-primary border-2 shadow-sm h-100">
+                        <div class="card-body">
+                            <h5 class="card-title text-primary">{{ event.name }}</h5>
+                            <p class="card-text text-muted">{{ (event.description or '')[:120] }}... </p>
+                            <p><strong>Date:</strong> {{ event.start_time.strftime('%b %d, %Y') }}</p>
+                            <span class="badge bg-primary px-3 py-2">Attended</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted mb-4">You haven’t attended any event yet.</p>
+            {% endif %}
+
+            <!-- Available Events -->
+            <h5 class="fw-bold mb-3 text-dark"><i class="bi bi-calendar3"></i> Upcoming / Available Events</h5>
+            {% if available_events %}
+            <div class="row row-cols-1 row-cols-md-2 g-4">
+                {% for event in available_events %}
+                <div class="col">
+                    <div class="card border-0 shadow h-100">
+                        <div class="card-body">
+                            <h5 class="card-title text-dark">{{ event.name }}</h5>
+                            <p class="card-text text-muted">{{ (event.description or '')[:120] }}... </p>
+                            <p><strong>Start:</strong> {{ event.start_time.strftime('%b %d, %Y') }}</p>
+                            <p><strong>Venue:</strong> {{ event.location.name or 'TBA' }}</p>
+
+                            <div class="event-image-container mb-3">
+                                <img src="{{ url_for('static', filename='images/' + (event.event_logo_url or 'logo.png')) }}"
+                                     alt="Event Flyer"
+                                     class="event-flyer img-fluid shadow-sm rounded-3">
+                            </div>
+
+                            <a href="{{ url_for('inv.register_on_site', org_uuid=org.uuid, event_id=event.id) }}"
+                               class="btn btn-primary w-100 fw-bold">
+                                <i class="bi bi-pencil-square"></i> Register Now
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted">No new events available for registration at the moment.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Remove white space overflow */
+    html, body {
+        overflow-x: hidden !important;
+    }
+
+    .event-image-container {
+        width: 100%;
+        height: 200px;
+        overflow: hidden;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .event-flyer {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .event-flyer:hover {
+        transform: scale(1.03);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    }
+
+    .card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-primary {
+        background: linear-gradient(90deg, #1976d2, #0d6efd);
+        border: none;
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background: linear-gradient(90deg, #0d6efd, #0056b3);
+    }
+
+    @media (max-width: 768px) {
+        .event-image-container {
+            height: 160px;
+        }
+    }
+</style>
+
+{% endblock %}

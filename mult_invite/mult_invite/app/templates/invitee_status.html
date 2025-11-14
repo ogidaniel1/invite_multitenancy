@@ -81,6 +81,18 @@
 </head>
 <body>
     <div class="status-container">
+        
+        <img src="{% if event.event_logo_url %}
+              {{ url_for('static', filename='images/' ~ event.event_logo_url) }}
+           {% elif invitee.organization and invitee.organization.logo_url %}
+              {{ url_for('static', filename='images/' ~ invitee.organization.logo_url) }}
+           {% else %}
+              {{ url_for('static', filename='images/image_2.jpg') }}
+           {% endif %}"
+     alt="{{ event.name or invitee.organization.name }} Logo"
+     class="responsive-image"
+     style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 10px;">
+
         <h2>{{invitee.organization.slug }}</h2>
         <h4><span>{{event.name}}</span></h4>
         <p>Dear, {{ invitee.name }}</p>

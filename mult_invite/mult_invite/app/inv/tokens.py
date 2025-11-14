@@ -43,26 +43,23 @@ def verify_reset_token(token, expiration=3600):
 # Assuming you have a function to send emails, e.g., send_email
 # You'll need an email configuration (SMTP server, port, user, pass) in your config.py
 
-def send_password_reset_email(admin_email, token):
-    
+def send_password_reset_email(admin_email, token, org_uuid):
     """Sends a password reset email to the given admin_email."""
-    reset_link = url_for('inv.reset_password', token=token,org_uuid='', _external=True)
+    reset_link = url_for('inv.reset_password', token=token, org_uuid=org_uuid, _external=True)
     
     try:
         html_body = render_template('emails/password_reset.html',
-                                 reset_link=reset_link)
+                                    reset_link=reset_link)
         send_async_email(
             subject='Password Reset Request',  
             sender=current_app.config['MAIL_DEFAULT_SENDER'],
             recipients=[admin_email],
             html_body=html_body
         )
-
         current_app.logger.info(f"Password reset email sent to {admin_email}")
     
     except Exception as e:
         current_app.logger.error(f"Failed to send password reset email to {admin_email}: {e}")
-
 
 
 #for new admin login...
