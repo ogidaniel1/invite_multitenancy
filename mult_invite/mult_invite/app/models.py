@@ -45,6 +45,9 @@ from flask_login import UserMixin
 from config import Config
 from flask import Blueprint,session
 
+# from sqlalchemy.types import TypeDecorator, CHAR, String
+# from sqlalchemy.dialects.mysql import CHAR as MySQLCHAR
+
 # Load environment variables
 load_dotenv()
 
@@ -54,14 +57,7 @@ DEFAULT_ADMIN_EMAIL = os.getenv('DEFAULT_ADMIN_EMAIL')
 DEFAULT_ADMIN_PASSWORD = os.getenv('DEFAULT_ADMIN_PASSWORD')
  
 
-# login_manager = LoginManager()
-# # login_manager.init_app(app)
-
-# @login_manager.user_loader
-# def load_user(admin_id):
-#     return Admin.query.get(int(admin_id))
-
-
+ 
 @login_manager.user_loader
 def load_user(user_id):
     """
@@ -129,7 +125,6 @@ def admin_or_super_required(f):
             flash("Please log in first to access this page.", "warning")
             return redirect(url_for('inv.universal_login'))
 
-        # Explicitly disallow non-admin roles (invitee, farmer, etc.)
         if getattr(current_user, "role", "") in ["invitee", "farmer", "guest"]:
             flash("You are not authorized to access this section.", "danger")
             return redirect(url_for('inv.universal_login'))
@@ -218,7 +213,19 @@ def is_authorized_user(current_user, org, event=None):
     # Default → not authorized
     return False, "unauthorized"
 
+
+ROLE_LABELS = {
+    "super_admin": "Super Admin",
+    "org_admin": "Organization Admin",
+    "location_admin": "Location Admin"
+}
+
+def readable_role_label(role):
+    return ROLE_LABELS.get(role, role.replace("_", " ").title())
+
+
 # ........................................
+
 class RoleSafetyMixin:
     """Provides safe defaults for role-based checks so Invitees won't break decorators."""
 
@@ -237,18 +244,18 @@ class RoleSafetyMixin:
     @property
     def is_invitee(self):
         return getattr(self, "role", "") == "invitee"
-    
+
  
 # Models
 class Admin(UserMixin,RoleSafetyMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(120), nullable=True)
+    email = db.Column(db.String(120), nullable=False)
+    password_hash = db.Column(db.String(255), nullable=True)
     address = db.Column(db.String(200))
     
     # Keep your existing fields
     name = db.Column(db.String(120), nullable=True)  # Your original field
-    phone_number = db.Column(db.String(15), unique=True, nullable=True)  #it is not required to invite admins
+    phone_number = db.Column(db.String(15), nullable=True)  #it is not required to invite admins phone number unique=True 
     gender = db.Column(db.String(100), nullable=True)
     
     # Keep your existing boolean flags AND add role field
@@ -275,6 +282,12 @@ class Admin(UserMixin,RoleSafetyMixin, db.Model):
     organization = db.relationship('Organization', backref='admins')
     location = db.relationship('Location', backref=db.backref('admins', lazy=True))
     
+    
+    __table_args__ = (
+        db.UniqueConstraint('email', 'organization_id', name='uq_admin_email_org'),
+        db.UniqueConstraint('phone_number', 'organization_id', name='uq_admin_phone_org'),
+    )
+
 
     @property
     def can_export_invitees(self):
@@ -327,7 +340,7 @@ class Invitee(UserMixin,RoleSafetyMixin, db.Model):
     address = db.Column(db.String(200))
     gender = db.Column(db.String(100), nullable=True)
     position = db.Column(db.String(50), nullable=False)
-    password_hash = db.Column(db.String(120), nullable=True) #reguired null=false
+    password_hash = db.Column(db.String(255), nullable=True) #reguired null=false
     is_active = db.Column(db.Boolean, default=True)  # New field for views
     
     register_date = db.Column(db.DateTime, nullable=True)
@@ -388,17 +401,44 @@ class Invitee(UserMixin,RoleSafetyMixin, db.Model):
     def is_invitee(self):
         return True
     
-
     def get_id(self):
         return str(self.id)
+
+
+# for mysql and postgres to work effectively with uuid
+# class GUID(TypeDecorator):
+#     """Platform-independent GUID type.
+#     Uses CHAR(36) storage on MySQL, and UUID on Postgres.
+#     """
+#     impl = CHAR(36)
     
+#     def process_bind_param(self, value, dialect):
+#         if value is None:
+#             return value
+#         if isinstance(value, uuid.UUID):
+#             # Convert UUID object to its string representation (36 characters)
+#             return str(value)
+#         return value
+
+#     def process_result_value(self, value, dialect):
+#         if value is None:
+#             return value
+#         # Convert string representation back to UUID object
+#         return uuid.UUID(value)
+
+#     @property
+#     def python_type(self):
+#         return uuid.UUID
 
 
 class Organization(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
-    # uuid = db.Column(UUID(as_uuid=True), unique=True, default=uuid.uuid4, nullable=False)
     uuid = db.Column(UUID(as_uuid=True), unique=True, default=lambda: uuid.uuid4(), nullable=False)
+    
+    # -------- FIX APPLIED HERE --------
+    # Use the custom GUID type which compiles to CHAR(36) for MySQL
+    # uuid = db.Column(GUID, unique=True, default=lambda: uuid.uuid4(), nullable=False)
 
     slug = db.Column(db.String(50), unique=True, nullable=False)  # Used in URLs
     logo_url = db.Column(db.String(255), nullable=True)  # Optional logo
@@ -615,6 +655,7 @@ class DeleteLog(db.Model):
     record_id = db.Column(db.Integer, nullable=False)       # ID of the deleted record
     deleted_by = db.Column(db.Integer, db.ForeignKey('admin.id'), nullable=False)
     deleted_at = db.Column(db.DateTime, default=datetime.utcnow)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=True)
     organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True)
 
 
@@ -624,6 +665,7 @@ class ActionLog(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('admin.id'), nullable=False)  # Admin who performed the action
     record_type = db.Column(db.String(50), nullable=True)   # E.g., 'invitee', 'member'
     record_id = db.Column(db.Integer, nullable=True)        # ID of the affected record
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=True)
     deleted_at = db.Column(db.DateTime, default=datetime.utcnow)
     organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True)  #allow super admin perform several actions
 
@@ -685,7 +727,7 @@ class InviteeForm(FlaskForm):
 
  
 class OrganizationForm(FlaskForm):
-    name = StringField('Location Name', validators=[DataRequired(), Length(min=2, max=255)])
+    name = StringField('Organization Name', validators=[DataRequired(), Length(min=2, max=255)])
     slug = StringField('Slug (URL Friendly Name)', validators=[DataRequired(), Length(min=2, max=255)])
     logo_url = FileField('Upload Image', validators=[DataRequired(),
         FileAllowed(['jpg', 'jpeg','png', 'gif'], 'Only .jpeg, .jpg, .png, and .gif formats are allowed'), 

@@ -256,10 +256,12 @@
                                         <h2 id="detail-name" class="mb-1"></h2>
                                         <p class="text-muted mb-0">
                                             <i class="fas fa-link me-1"></i>
-                                            <a class="nav-link {% if request.path == url_for('inv.show_invitees',org_uuid=organizations.uuid) %}active{% endif %}"
-                                                href="{{ url_for('inv.show_invitees',org_uuid=organizations.uuid) }}">
-                                                <i class="bi bi-speedometer2"></i><span id="detail-slug"></span>
+
+                                            <a id="invitees-link" class="nav-link">
+                                                <i class="bi bi-speedometer2"></i>
+                                                <span id="detail-slug"></span>
                                             </a>
+
                                         </p>
                                     </div>
                                 </div>
@@ -671,6 +673,10 @@
             document.getElementById('detail-uuid').textContent = org.uuid;
             document.getElementById('detail-created').textContent = formatDate(org.created_at);
             document.getElementById('detail-locations').textContent = `${org.active_locations_count || 0} active`;
+           
+            // FIX: Build correct invitees URL
+            let inviteesUrl = "/" + org.uuid + "/invitees";
+            document.getElementById("invitees-link").href = inviteesUrl;
 
             const logoContainer = document.getElementById('detail-logo');
             if (org.logo_url) {

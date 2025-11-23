@@ -467,5 +467,21 @@
             // Or if navigating: window.location.href = '/create-new-organization';
         }
     </script>
+
+
+       <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Auto-dismiss flash messages after 5 seconds
+        const flashMessages = document.querySelectorAll('#flashMessagesContainer .alert');
+        flashMessages.forEach(msg => {
+            setTimeout(() => {
+                // Use Bootstrap's alert instance to close properly
+                const alertInstance = bootstrap.Alert.getOrCreateInstance(msg);
+                alertInstance.close();
+            }, 5000); // 5000ms = 5 seconds
+        });
+    });
+    </script>
+    
 </body>
 </html>

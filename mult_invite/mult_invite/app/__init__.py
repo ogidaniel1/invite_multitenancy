@@ -26,7 +26,6 @@ def _send_async_email(app, msg):
     with app.app_context():
         mail.send(msg)
         
-       
 def send_async_email(subject, recipients, html_body, sender=None):
     app= current_app._get_current_object()
     msg=Message(subject=subject, recipients=recipients, sender=sender)
@@ -71,7 +70,7 @@ def create_app():
     app.config['MAIL_USE_TLS'] = True
     app.config['MAIL_USE_SSL'] = False
     app.config['ADMINS'] = ['your-email@example.com'] # Example admin email
-    app.config['MAIL_DEFAULT_SENDER'] = ('Your App Name', app.config['MAIL_USERNAME']) # Example default sender tuple
+    app.config['MAIL_DEFAULT_SENDER'] = ('Danweb IT SaaS', app.config['MAIL_USERNAME']) # Example default sender tuple
 
  
     # Initialize extensions with app

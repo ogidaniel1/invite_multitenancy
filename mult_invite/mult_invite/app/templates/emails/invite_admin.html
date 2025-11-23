@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html>
-
 <head>
     <meta charset="UTF-8">
     <title>Admin Invitation</title>
@@ -24,28 +23,38 @@
         .btn {
             display: inline-block;
             background-color: #007bff;
-            color: white;
+            color: white !important;
             padding: 10px 16px;
             border-radius: 4px;
             text-decoration: none;
+            margin-top: 20px;
         }
     </style>
 </head>
 
 <body>
     <div class="email-container">
-        <h2>Hello {{ name or email }},</h2>
-        <p>You’ve been invited to become an admin on the <strong>{{ organization_name }}</strong> Event.
-        </p>
-
-        <p><strong>Login Email:</strong> {{ email }}<br>
+        <p><strong>Hello</strong>,</p><br>
+        <p>You’ve been invited to become an admin on the <strong>{{ organization_name|title }}</strong> event.</p>
+        <p><strong>Role:</strong> {{ role }}<br></p>
+        <p>
+            <strong>Login Email:</strong> {{ email }}<br>
             <strong>Temporary Password:</strong> {{ temp_password }}
         </p>
 
-        <p>Please log in and change your password after your first login.</p>
+        <p>Please click the button below to log in and change your password.</p>
 
-        <p style="margin-top: 30px;">Thanks,<br><strong>The {{ organization_name }} Team</strong></p>
+        <!-- 👇 NEW LOGIN BUTTON -->
+        <p>
+            <a href="{{ login_url }}" class="btn" target="_blank">Login to Dashboard</a>
+        </p>
+
+        <p>If the button does not work, copy and paste this link:</p>
+        <p><a href="{{ login_url }}">{{ login_url }}</a></p>
+
+        <p style="margin-top: 30px;">Thanks,<br>
+            <strong>The {{ organization_name|upper }} Team</strong>
+        </p>
     </div>
 </body>
-
 </html>

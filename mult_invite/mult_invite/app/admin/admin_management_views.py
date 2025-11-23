@@ -8,7 +8,7 @@ import json
 from flask_wtf.csrf import generate_csrf, validate_csrf,CSRFError
 from flask import current_app
 from app.models import db,Location,Event,Admin,Organization,Admin,Invitation,Invitee
-from app.models import InviteeForm,super_required,SubmitField,Feedback
+from app.models import InviteeForm,super_required,SubmitField,Feedback,readable_role_label
 from app import csrf,mail
 from app.models import FeedbackForm,AttendanceForm,AdminForm,admin_or_super_required
 import secrets
@@ -465,76 +465,74 @@ def get_administrators():
 @login_required
 @super_admin_required
 def create_administrator():
-
-    """Create a new administrator"""
-    # from app import db, Admin, Organization # Ensure models are imported
     try:
-        
-        data = request.get_json()
-        name = data.get('name')
-        email = data.get('email')
-        password = data.get('password') # For new admin, password should be handled securely
+        data = request.get_json() or {}
+        name = (data.get('name') or "").strip()
+        email = (data.get('email') or "").strip().lower()
         role = data.get('role')
         organization_id = data.get('organization_id')
         is_active = data.get('is_active', True)
 
         if not email or not role or organization_id is None:
-            return jsonify({'error': 'Email, role, and organization_id are required to send an invitation.'}), 400
+            return jsonify({'error': 'Email, role, and organization_id are required.'}), 400
 
-        if Admin.query.filter_by(email=email).first():
-            return jsonify({'error': 'Administrator with this email already exists.'}), 409
+        organization = Organization.query.get(organization_id)
+        if not organization:
+            return jsonify({'error': 'Organization not found.'}), 404
 
-        if organization_id:
-            organization = Organization.query.get(organization_id)
-            if not organization:
-                return jsonify({'error': 'Organization not found.'}), 404
-            
-        # Generate and hash temporary password
+        # ensure uniqueness per organization
+        if Admin.query.filter_by(email=email, organization_id=organization_id).first():
+            return jsonify({'error': 'Administrator with this email already exists in this organization.'}), 409
+
         temp_password = secrets.token_urlsafe(8)
-        hashed_password = generate_password_hash(temp_password)
-
 
         new_admin = Admin(
-            name=name or email.split("@")[0],  # fallback to something
+            name=name or email.split("@")[0],
             email=email,
             role=role,
             organization_id=organization_id,
             is_active=is_active,
-            # password=hashed_password,
             created_at=datetime.utcnow()
         )
-        
-        # new_admin.set_password(password) # Assuming your Admin model has a set_password method
-        # Use method to set hashed password
         new_admin.set_password(temp_password)
+
         db.session.add(new_admin)
         db.session.commit()
 
-        organization = Organization.query.get(organization_id)
-        organization_name = organization.name
+        # readable role label
+        readable_role = readable_role_label(role)
 
-        #sending invite to new admins 
-        email_sent = send_admin_invite_email(email=email, name=name, temp_password=temp_password,organization_name=organization_name)
-        
+        # send invite (non-blocking recommended)
+        email_sent = send_admin_invite_email(
+            email=email,
+            name=name,
+            role=readable_role,
+            temp_password=temp_password,
+            organization_name=organization.name
+        )
+
+        msg = "Administrator created successfully"
         if not email_sent:
-            flash("Admin created, but failed to send email invite.", "warning")
+            msg += " (email invite may be delayed or failed)"
 
         return jsonify({
             'success': True,
-            'message': 'Administrator created successfully',
+            'message': msg,
             'admin': {
                 'id': new_admin.id,
                 'name': new_admin.name,
                 'email': new_admin.email,
-                'role': new_admin.role,
+                'role': readable_role,
                 'is_active': new_admin.is_active,
-                'temporary_password': temp_password  # Show temp password 
+                'temporary_password': temp_password
             }
         }), 201
 
     except Exception as e:
         db.session.rollback()
+        current_app.logger.exception("Error creating admin")
         return jsonify({'error': str(e)}), 500
+
 
 
 # NEW: Update Administrator
@@ -542,13 +540,11 @@ def create_administrator():
 @login_required
 @super_admin_required
 def update_administrator(admin_id):
-    """Update an existing administrator"""
-    # from app import db, Admin, Organization # Ensure models are imported
     try:
         admin = Admin.query.get_or_404(admin_id)
-        data = request.get_json()
+        data = request.get_json() or {}
 
-        # Prevent a super_admin from changing their own role or deactivating themselves
+        # prevent self-demotion/deactivation for super admin
         if admin.id == current_user.id and admin.role == 'super_admin':
             if 'role' in data and data['role'] != 'super_admin':
                 return jsonify({'error': 'Cannot change your own super admin role.'}), 400
@@ -556,40 +552,45 @@ def update_administrator(admin_id):
                 return jsonify({'error': 'Cannot deactivate your own super admin account.'}), 400
 
         if 'name' in data:
-            admin.name = data['name']
+            admin.name = data['name'].strip()
+
         if 'email' in data:
-            # Check for email uniqueness if updated
-            if Admin.query.filter(Admin.email == data['email'], Admin.id != admin_id).first():
-                return jsonify({'error': 'Email already exists for another administrator.'}), 409
-            admin.email = data['email']
+            new_email = (data['email'] or '').strip().lower()
+            org_id = data.get('organization_id', admin.organization_id)
+            
+            # uniqueness within organization
+            if Admin.query.filter(Admin.email == new_email,
+                                  Admin.organization_id == org_id,
+                                  Admin.id != admin.id).first():
+                return jsonify({'error': 'Email already exists for another administrator in this organization.'}), 409
+            admin.email = new_email
+
         if 'password' in data and data['password']:
-            admin.set_password(data['password']) # Assuming set_password method
+            admin.set_password(data['password'])
+
         if 'role' in data:
             admin.role = data['role']
+
         if 'is_active' in data:
             admin.is_active = data['is_active']
+
         if 'organization_id' in data:
             organization = Organization.query.get(data['organization_id'])
             if not organization:
                 return jsonify({'error': 'Organization not found.'}), 404
             admin.organization_id = data['organization_id']
-        
+
         db.session.commit()
 
         return jsonify({
             'success': True,
             'message': 'Administrator updated successfully',
-            'admin': {
-                'id': admin.id,
-                'name': admin.name,
-                'email': admin.email,
-                'role': admin.role,
-                'is_active': admin.is_active,
-                'organization_id': admin.organization_id
-            }
+            'admin': admin.to_dict()
         })
+
     except Exception as e:
         db.session.rollback()
+        current_app.logger.exception("Error updating admin")
         return jsonify({'error': str(e)}), 500
 
 

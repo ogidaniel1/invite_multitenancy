@@ -26,72 +26,85 @@ def generate_reset_token(email):
     # Token valid for 1 hour (3600 seconds)
     return serializer.dumps(email, salt='password-reset-salt')
 
+
 def verify_reset_token(token, expiration=3600):
     """Verifies a password reset token and returns the email if valid."""
     serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
     try:
-        email = serializer.loads(
-            token,
-            salt='password-reset-salt',
-            max_age=expiration
+        email = serializer.loads(token,salt='password-reset-salt', max_age=expiration
         )
     except Exception: # SignatureExpired, BadTimeSignature, etc.
         return None
     return email
 
-# app/utils/email_utils.py (Update your email sending utilities)
-# Assuming you have a function to send emails, e.g., send_email
-# You'll need an email configuration (SMTP server, port, user, pass) in your config.py
-
-def send_password_reset_email(admin_email, token, org_uuid):
-    """Sends a password reset email to the given admin_email."""
-    reset_link = url_for('inv.reset_password', token=token, org_uuid=org_uuid, _external=True)
-    
-    try:
-        html_body = render_template('emails/password_reset.html',
-                                    reset_link=reset_link)
-        send_async_email(
-            subject='Password Reset Request',  
-            sender=current_app.config['MAIL_DEFAULT_SENDER'],
-            recipients=[admin_email],
-            html_body=html_body
-        )
-        current_app.logger.info(f"Password reset email sent to {admin_email}")
-    
-    except Exception as e:
-        current_app.logger.error(f"Failed to send password reset email to {admin_email}: {e}")
 
 
 #for new admin login...
-def send_admin_login_link(admin,org):
+# def send_admin_login_link(admin,org):
 
-    org = Organization.query.get(admin.organization_id)
-    if not org:
-        raise ValueError ("Organization not found")
+#     org = Organization.query.get(admin.organization_id)
+#     if not org:
+#         raise ValueError ("Organization not found")
     
-    sender = getattr(org, "email",current_app.config['MAIL_USERNAME'])
+#     sender = getattr(org, "email",current_app.config['MAIL_USERNAME'])
 
-    token=generate_reset_token(admin.email)
-    login_url= url_for('inv.login_with_token', token=token, _external=True)
-    try:
-        # HTML version
-        html_body = render_template(
-                "emails/welcome_admin.html",
-                admin=admin,
-                org=org,
-                login_url=login_url
-            )
+#     token=generate_reset_token(admin.email)
+#     login_url= url_for('inv.login_with_token', token=token, _external=True)
+#     try:
+#         # HTML version
+#         html_body = render_template(
+#                 "emails/welcome_admin.html",
+#                 admin=admin,
+#                 org=org,
+#                 login_url=login_url
+#             )
         
-        send_async_email(
-            subject= f"Welcome! your Admin access to {org.name.upper()}",
-            recipients=[admin.email],
-            html_body=html_body,
-            sender=sender
-        )
+#         send_async_email(
+#             subject= f"Welcome! your Admin access to {org.name.upper()}",
+#             recipients=[admin.email],
+#             html_body=html_body,
+#             sender=sender
+#         )
       
-    except Exception as e:
-        print(f"Error sending email: {e}")
-        raise
+#     except Exception as e:
+#         print(f"Error sending email: {e}")
+#         raise
+
+def send_admin_login_link(admin, org=None):
+    # lazy imports
+    from app.models import Organization
+   
+    # ensure org instance
+    if not org:
+        org = Organization.query.get(admin.organization_id)
+    if not org:
+        raise ValueError("Organization not found")
+
+    sender = getattr(org, "email", None) or current_app.config.get('MAIL_DEFAULT_SENDER') or current_app.config.get('MAIL_USERNAME')
+
+    token = generate_reset_token(admin.email)
+    # This route logs in via token and redirects to org pages
+    login_url = url_for('inv.login_with_token', token=token, _external=True)
+
+    html_body = render_template(
+        "emails/welcome_admin.html",
+        admin=admin,
+        org=org,
+        login_url=login_url
+    )
+
+    try:
+        send_async_email(
+            subject=f"Welcome! Your Admin access to {org.name}",
+            sender=sender,
+            recipients=[admin.email],
+            html_body=html_body
+        )
+        current_app.logger.info("Admin login link sent to %s", admin.email)
+        return True
+    except Exception as exc:
+        current_app.logger.error("Error sending admin email: %s", exc)
+        return False
 
 
 # send confirm mail
@@ -193,42 +206,37 @@ def send_invitation_email(invitation_id,msg_data):
     # current_app.logger.info(f"Invitation email queued for {invitation.email}.")
 
 
-# admin email invite
-def send_admin_invite_email(email, name, temp_password, organization_name):
-    
-    org = Organization.query.filter_by(name=organization_name).first_or_404()
+
+def send_admin_invite_email(email, name,role, temp_password, organization_name):
+    from app.models import db, Organization
+
+    # Find organization safely
+    org = Organization.query.filter(
+        db.func.lower(Organization.name) == organization_name.lower()
+    ).first()
+
     if not org:
-        raise ValueError ("Organization not found")
-    
-    sender = getattr(org, "email",current_app.config['MAIL_USERNAME'])
+        current_app.logger.error(f"Organization '{organization_name}' not found.")
+        return False
 
-    """
-    Sends an invitation email to a new administrator with a temporary password using HTML template.
-    """
+    # Safe fallback sender
+    sender = getattr(org, "email", None) or \
+             current_app.config.get("MAIL_DEFAULT_SENDER") or \
+             current_app.config['MAIL_USERNAME']
+
+    # NEW: Login URL
+    login_url = url_for("inv.login", org_uuid=org.uuid, _external=True)
+
     try:
-        # Plain text version (fallback)
-        body_msg = f"""Hello {name or email},
-
-        You have been invited to join the {organization_name.upper()} admin panel.
-
-        Login Email: {email}
-        Temporary Password: {temp_password}
-
-        Please log in and change your password after your first login.
-
-        Thanks,
-        The {organization_name.upper()} Team
-        """
-        
-        # HTML version
         html_body = render_template(
             "emails/invite_admin.html",
             name=name,
             email=email,
-            body_msg=body_msg,
             temp_password=temp_password,
             org=org,
-            organization_name=organization_name
+            role=role,
+            organization_name=organization_name,
+            login_url=login_url   
         )
 
         send_async_email(
@@ -237,9 +245,14 @@ def send_admin_invite_email(email, name, temp_password, organization_name):
             recipients=[email],
             html_body=html_body
         )
-        current_app.logger.info(f"invitation sent to {email} for {organization_name}")
-    
+
+        current_app.logger.info(
+            f"Admin invite email sent → {email} for organization {organization_name}"
+        )
+        return True
+
     except Exception as mail_error:
-        print(f"Failed to send admin invite email: {mail_error}")
+        current_app.logger.error(f"Failed to send admin invite email: {mail_error}")
         return False
+    
 

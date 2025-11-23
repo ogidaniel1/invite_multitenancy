@@ -24,7 +24,7 @@
                 </div>
             {% endif %}
         {% endwith %}
-                    <form method="POST" action="{{ url_for('inv.super_login',org=org,admin=admin) }}" class="form-horizontal">
+                    <form method="POST" action="{{ url_for('inv.super_login') }}" class="form-horizontal">
                         {{ form.hidden_tag() }}
                         
                         <div class="form-floating mb-3">

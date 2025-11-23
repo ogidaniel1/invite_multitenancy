@@ -122,7 +122,7 @@
     {% endif %}
     {% endwith %}
 
-    <p class="message {{ status }}">{{ message }}</p>
+    <p class="message {{ status }}">{{ message }} </p>
 
     {% if event.event_logo_url %}
     <img src="{{ url_for('static', filename='images/' ~ event.event_logo_url) }}" alt="{{ org.name }} Logo"

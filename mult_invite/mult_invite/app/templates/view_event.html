@@ -39,7 +39,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {% for event in events %}
+                                    {% for event in events.items %}
                                     <tr>
                                         <td>{{ loop.index }}</td>
                                         <td><strong>{{ event.name }}</strong></td>

@@ -1901,11 +1901,12 @@
         });
     }
 
-    // --- Admins ---
+   // --- Admins ---
     async function toggleAdminStatus(adminId, isActive) {
+        const actionVerb = isActive ? "Activating" : "Deactivating";
         const actionText = isActive ? "activate" : "deactivate";
         confirmAction(`Are you sure you want to ${actionText} this administrator?`, async () => {
-            showLoading(true, `${actionText}ing administrator...`);
+            showLoading(true, `${actionVerb} administrator...`);
             try {
                 // Use fetchWithCsrf
                 const response = await fetchWithCsrf(`${API_BASE}/api/admin/administrators/${adminId}/toggle-status`, {
