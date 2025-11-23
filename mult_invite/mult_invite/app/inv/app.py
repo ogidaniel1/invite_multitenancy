@@ -2967,58 +2967,144 @@ def register_admin(org_uuid):
 
 #............edit function....................
 
+# @app_.route('/<uuid:org_uuid>/edit_admin/<int:id>', methods=['GET', 'POST'])
+# @admin_or_super_required
+# def edit_admin(org_uuid, id):
+#     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+#     admin = Admin.query.filter_by(id=id, organization_id=org.id).first_or_404()
+#     org_locations = Location.query.filter_by(organization_id=org.id).all()
+
+#     if request.method == 'POST':
+#         new_name = request.form.get('name', '').strip()
+#         new_email = request.form.get('email', '').strip().lower()
+#         new_password = request.form.get('password', '').strip()
+#         new_gender = request.form.get('gender', '').strip()
+#         new_phone_number = request.form.get('phone_number', '').strip()
+#         new_location_id = request.form.get('location_id', '').strip() or None
+#         new_location_id = int(new_location_id) if new_location_id else None
+
+#         existing_admin = Admin.query.filter_by(email=new_email, organization_id=org.id).first()
+#         if existing_admin and existing_admin.id != admin.id:
+#             flash('An admin with this email already exists.', 'danger')
+#             return redirect(url_for('inv.edit_admin', id=admin.id, org_uuid=org.uuid))
+
+#         if new_password:
+#             if len(new_password) < 6:
+#                 flash('Password must be at least 6 characters long.', 'danger')
+#                 return redirect(url_for('inv.edit_admin', id=admin.id, org_uuid=org.uuid))
+#             admin.set_password(new_password)
+
+#         admin.name = new_name
+#         admin.email = new_email
+#         admin.phone_number = new_phone_number
+#         admin.gender = new_gender
+
+#         # only assign location if role is location_admin
+#         if admin.role == 'location_admin':
+#             admin.location_id = new_location_id
+
+#         admin.updated_at = datetime.utcnow()
+
+#         try:
+#             db.session.commit()
+#             log_action('edit', user_id=current_user.id if current_user.is_authenticated else None,
+#                        record_type='Admin', record_id=admin.id, associated_org_id=org.id)
+#             flash('Admin updated successfully!', 'success')
+#             return redirect(url_for('inv.manage_admin', org_uuid=org.uuid))
+#         except Exception as e:
+#             db.session.rollback()
+#             current_app.logger.exception("Error updating admin")
+#             flash(f'An error occurred: {e}', 'danger')
+#             return render_template('edit_admin.html', admin=admin, org=org, org_locations=org_locations)
+
+#     return render_template('edit_admin.html', admin=admin, org=org, org_locations=org_locations)
+
 @app_.route('/<uuid:org_uuid>/edit_admin/<int:id>', methods=['GET', 'POST'])
 @admin_or_super_required
 def edit_admin(org_uuid, id):
+
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
     admin = Admin.query.filter_by(id=id, organization_id=org.id).first_or_404()
     org_locations = Location.query.filter_by(organization_id=org.id).all()
 
     if request.method == 'POST':
+
+        # --- Pull form fields ---
         new_name = request.form.get('name', '').strip()
         new_email = request.form.get('email', '').strip().lower()
         new_password = request.form.get('password', '').strip()
         new_gender = request.form.get('gender', '').strip()
-        new_phone_number = request.form.get('phone_number', '').strip()
-        new_location_id = request.form.get('location_id', '').strip() or None
+        new_phone = request.form.get('phone_number', '').strip()
+        new_role = request.form.get('role', '').strip()
+
+        new_location_id = request.form.get('location_id') or None
         new_location_id = int(new_location_id) if new_location_id else None
 
+        # --- Validate email uniqueness ---
         existing_admin = Admin.query.filter_by(email=new_email, organization_id=org.id).first()
         if existing_admin and existing_admin.id != admin.id:
-            flash('An admin with this email already exists.', 'danger')
+            flash("An admin with this email already exists in this organization.", "danger")
             return redirect(url_for('inv.edit_admin', id=admin.id, org_uuid=org.uuid))
 
+        # --- Only super admins can change super_admin role ---
+        if admin.role == "super_admin" and not current_user.is_super_admin:
+            flash("Please Contact Support.", "danger")
+            return redirect(url_for('inv.edit_admin', id=admin.id, org_uuid=org.uuid))
+
+        # --- Update password if provided ---
         if new_password:
             if len(new_password) < 6:
-                flash('Password must be at least 6 characters long.', 'danger')
+                flash("Password must be at least 6 characters long.", "danger")
                 return redirect(url_for('inv.edit_admin', id=admin.id, org_uuid=org.uuid))
             admin.set_password(new_password)
 
+        # --- Update basic fields ---
+        old_role = admin.role
         admin.name = new_name
         admin.email = new_email
-        admin.phone_number = new_phone_number
+        admin.phone_number = new_phone
         admin.gender = new_gender
+        admin.role = new_role   # <-- IMPORTANT FIX
 
-        # only assign location if role is location_admin
-        if admin.role == 'location_admin':
+        # --- Handle location assignment ---
+        if new_role == "location_admin":
             admin.location_id = new_location_id
+        else:
+            # Any other role must NOT retain a location
+            admin.location_id = None
 
         admin.updated_at = datetime.utcnow()
 
+        # --- Save changes ---
         try:
             db.session.commit()
-            log_action('edit', user_id=current_user.id if current_user.is_authenticated else None,
-                       record_type='Admin', record_id=admin.id, associated_org_id=org.id)
-            flash('Admin updated successfully!', 'success')
+            log_action(
+                "edit",
+                user_id=current_user.id if current_user.is_authenticated else None,
+                record_type="Admin",
+                record_id=admin.id,
+                associated_org_id=org.id
+            )
+
+            # If the admin edited himself and the role changed → force relogin
+            if admin.id == current_user.id and old_role != new_role:
+                logout_user()
+                flash("Your role has been updated. Please log in again.", "info")
+                return redirect(url_for("inv.universal_login"))
+
+            flash("Admin updated successfully!", "success")
             return redirect(url_for('inv.manage_admin', org_uuid=org.uuid))
+
         except Exception as e:
             db.session.rollback()
             current_app.logger.exception("Error updating admin")
-            flash(f'An error occurred: {e}', 'danger')
-            return render_template('edit_admin.html', admin=admin, org=org, org_locations=org_locations)
+            flash(f"An error occurred: {e}", "danger")
 
-    return render_template('edit_admin.html', admin=admin, org=org, org_locations=org_locations)
+            return render_template('edit_admin.html',admin=admin,org=org,org_locations=org_locations
+            )
 
+    # GET request
+    return render_template('edit_admin.html',admin=admin,org=org,org_locations=org_locations)
 
 
 
