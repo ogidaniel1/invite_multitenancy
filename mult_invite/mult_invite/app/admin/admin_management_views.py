@@ -16,7 +16,7 @@ from werkzeug.security import generate_password_hash
 
 # Assuming you have these models - adjust imports based on your project structure
 # from app import db, Admin, Organization, Location, Invitation
-from app.inv.tokens import send_invitation_email,send_admin_invite_email # Assuming you have email utilities
+from app.inv.tokens import send_invitee_invitation_email,send_admin_invite_email,send_invitation_email # Assuming you have email utilities
 
 
 admin_bp = Blueprint('admin', __name__, template_folder='../templates')
@@ -786,78 +786,104 @@ def get_invitations():
         return jsonify({'error': str(e)}), 500
 
 
+
 @admin_bp.route('/api/admin/invitations', methods=['POST'])
 @login_required
 @super_admin_required
 def send_invitation():
 
-    """Send a new invitation"""
-    # ... (existing send_invitation logic) ...
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         email = data.get('email')
         role = data.get('role')
         organization_id = data.get('organization_id')
-        
-        # Validate required fields (only for this endpoint's specific requirements)
-        # If organization_id is always required for *this* endpoint, keep it here:
-        if not email or not role or organization_id is None: # Added organization_id check
-             return jsonify({'error': 'Email, role, and organization_id are required'}), 400
 
-        existing_user = Admin.query.filter_by(email=email).first()
+        # ===============================
+        # 1. Validate Input
+        # ===============================  
+
+        allowed_roles = ["org_admin", "manager", "staff", "location_admin"]
+
+        if role not in allowed_roles:
+            return jsonify({"error": "Only admin roles can be invited."}), 400
+
+        if not email or not role:
+            return jsonify({'error': 'Email and role are required'}), 400
+
+        if organization_id is None:
+            return jsonify({'error': 'Organization ID is required'}), 400
+
+        # ===============================
+        # 2. Validate Organization
+        # ===============================  
+        organization = Organization.query.get(organization_id)
+        if not organization:
+            return jsonify({'error': 'Organization not found'}), 404
+
+
+        # ===============================
+        # 3. Check if user already exists in this organization
+        # ===============================  
+        existing_user = Admin.query.filter_by(
+            email=email,
+            organization_id=organization_id
+        ).first()
+
         if existing_user:
             return jsonify({'error': 'User with this email already exists'}), 400
 
-        existing_invitation = Invitation.query.filter_by(
+        # ===============================
+        # 4. Check pending invitation (for same org only)
+        # ===============================  
+        existing_invite = Invitation.query.filter_by(
             email=email,
+            organization_id=organization_id,
             status='pending'
         ).first()
-        if existing_invitation:
+
+        if existing_invite:
             return jsonify({'error': 'Pending invitation already exists for this email'}), 400
 
-        # Fetch the Organization object if organization_id is provided
-        organization = None
-        if organization_id:
-            organization = Organization.query.get(organization_id)
-            if not organization:
-                return jsonify({'error': 'Organization not found'}), 404
-
-        # Create invitation instance
+        # ===============================
+        # 5. Create the Invitation
+        # ===============================  
         invitation = Invitation(
             email=email,
             role=role,
-            # Pass the organization object (which can be None)
             organization=organization,
             invited_by_id=current_user.id,
             status='pending',
             expires_at=datetime.utcnow() + timedelta(days=7)
         )
-        db.session.add(invitation)
-        db.session.commit() # Commit to persist the invitation and its linked organization
 
-        # Send invitation email (pass ID to the async sender)
+        db.session.add(invitation)
+        db.session.commit()  # required to assign ID
+
+        # ===============================
+        # 6. Send Email
+        # ===============================  
         try:
-            send_invitation_email(invitation.id) # <-- PASS INVITATION ID HERE
+            send_invitation_email(invitation.id)
+        
+        except Exception as e:
+            current_app.logger.error(f"Email failed: {e}")
             return jsonify({
                 'success': True,
-                'message': 'Invitation sent successfully',
+                'message': 'Invitation created but email failed.',
                 'invitation_id': invitation.id
             }), 201
-        except Exception as email_error:
-            current_app.logger.error(
-                f"Failed to send invitation email for {invitation.email}: {email_error}",
-                exc_info=True
-            )
-            return jsonify({
-                'success': True, # Still report success for invitation creation
-                'message': 'Invitation created, but email sending failed. Check server logs for details.',
-                'invitation_id': invitation.id
-            }), 201
+
+        return jsonify({
+            'success': True,
+            'message': 'Invitation sent successfully',
+            'invitation_id': invitation.id
+        }), 201
 
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Error in send_invitation endpoint: {str(e)}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.error(f"Error in send_invitation: {e}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
+
 
 
 # NEW: Update Invitation (e.g., to change role, extend expiry, or manually change status)
@@ -984,7 +1010,6 @@ def bulk_delete_invitations():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
-
 
 
 # NEW: delete Invitation
@@ -1152,7 +1177,8 @@ def bulk_invitation_action():
         db.session.rollback()
         current_app.logger.error(f"Error during bulk invitation action: {str(e)}", exc_info=True)
         return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
-      
+
+
 
 @admin_bp.route('/api/admin/inviters')
 @login_required
@@ -1247,7 +1273,7 @@ def get_invitee():
 
 
 # NEW: Create Invitee (though usually invitees are created via an invitation acceptance flow)
-# This might be useful for manual additions by an admin.
+
 @admin_bp.route('/api/admin/managed_invitees', methods=['POST'])
 @login_required
 @super_admin_required
@@ -1272,15 +1298,45 @@ def create_invitee():
         if not organization:
             return jsonify({'error': 'Organization not found.'}), 404
 
+        # Generate temporary password
+        temp_password = secrets.token_urlsafe(8)  # 8-character random password
+
         new_invitee = Invitee(
             name=name,
             email=email,
             organization_id=organization_id,
+            position=data.get('position'),  # optional, can default to None
             confirmed=confirmed_status
         )
+
+        new_invitee.set_password(temp_password)  # Hash the password
+
         db.session.add(new_invitee)
         db.session.commit()
 
+        try:
+            send_invitee_invitation_email(new_invitee.id, temp_password=temp_password)
+
+        except Exception as email_error:
+            current_app.logger.error(
+                    f"Failed to send invitation email for {new_invitee.email}: {email_error}",
+                    exc_info=True
+                )
+            
+            # ✔ FIX: return even if email fails
+            return jsonify({
+                'success': True,
+                'warning': 'Invitee created but email failed to send',
+                'invitee': {
+                    'id': new_invitee.id,
+                    'name': new_invitee.name,
+                    'email': new_invitee.email,
+                    'position': new_invitee.position,
+                    'confirmed': new_invitee.confirmed
+                }
+            }), 207   # 207 = Multi-Status (good for partial success)
+
+        # EMAIL SENT SUCCESSFULLY
         return jsonify({
             'success': True,
             'message': 'Invitee created successfully',
@@ -1288,10 +1344,11 @@ def create_invitee():
                 'id': new_invitee.id,
                 'name': new_invitee.name,
                 'email': new_invitee.email,
+                'position': new_invitee.position,
                 'confirmed': new_invitee.confirmed
             }
         }), 201
-
+    
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500

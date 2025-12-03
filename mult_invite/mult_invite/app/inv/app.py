@@ -9,6 +9,7 @@ from flask_sqlalchemy import SQLAlchemy
 from Crypto.Hash import SHA256
 from alembic import op
 from datetime import datetime, timezone
+import secrets
 import json
 from sqlalchemy.orm import joinedload
 import logging
@@ -29,7 +30,7 @@ from sqlalchemy import and_ , or_,cast, String,func, case
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField,FileField
 from wtforms.validators import DataRequired, Email
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import check_password_hash
 import io
 from flask_mail import  Mail,Message
 from email.mime.image import MIMEImage
@@ -64,8 +65,8 @@ from flask import current_app
 from flask_dance.contrib.google import make_google_blueprint, google
 
 
-from app.inv.tokens import generate_reset_token, verify_reset_token,send_admin_login_link,send_confirm_email
-from app.models  import RequestResetForm, ResetPasswordForm # Create these forms below
+from app.inv.tokens import send_admin_invite_email,send_confirm_email,verify_invitee_token,verify_admin_token
+from app.models  import RequestResetForm, ResetPasswordForm,readable_role_label # Create these forms below
 from app.__init__ import send_async_email
  
 # from models import get_lgas,fetch_lgas
@@ -485,7 +486,7 @@ def universal_login():
                 org = current_user.organization
                 return redirect(url_for('inv.show_invitees', org_uuid=org.uuid))
 
-        elif isinstance(current_user, Admin):
+        elif isinstance(current_user, Admin) and current_user.is_super_admin:
             org = current_user.organization
             return redirect(url_for('inv.show_invitees', org_uuid=org.uuid))
         return redirect(url_for('inv.universal_login'))
@@ -557,8 +558,8 @@ def super_login():
 
         if admin and admin.check_password(form.password.data):
             if admin.is_super_admin:
+                session['user_role'] = "admin"
                 login_user(admin)
-                # session['user_role'] = "admin" 
                 # session['org_uuid'] = str(org.uuid)
                 # session['admin_id'] = admin.id
                  # ✅ Update last login
@@ -605,28 +606,6 @@ def login(org_uuid):
 
     return render_template('login.html', form=form, org=org)
 
-
-@app_.route('/login/<token>')
-def login_with_token(token):
-    email = verify_reset_token(token)
-    if not email:
-        flash("Invalid or expired login link.", "danger")
-        return redirect(url_for("inv.universal_login"))
-
-    admin = Admin.query.filter_by(email=email).first()
-    if not admin:
-        flash("Admin account not found.", "danger")
-        return redirect(url_for("inv.universal_login"))
-
-    login_user(admin)
-    flash(f"Welcome back {admin.name}!", "success")
-    # redirect to latest event for the admin's org or event list
-    if admin.organization:
-        event = Event.query.filter_by(organization_id=admin.organization.id).order_by(Event.start_time.desc()).first()
-        if event:
-            return redirect(url_for("inv.show_invitee_event", org_uuid=admin.organization.uuid, event_id=event.id))
-        return redirect(url_for("inv.show_event_invitees", org_uuid=admin.organization.uuid))
-    return redirect(url_for("inv.universal_login"))
 
 
 # -----------------------------
@@ -677,6 +656,7 @@ def google_auth_callback(org_uuid):
 
     # Log user in
     login_user(invitee)
+    session['user_role'] = "invitee" 
     flash(f"Welcome back, {invitee.name}!", "success")
     
     # Redirect to their event list
@@ -701,7 +681,7 @@ def invitee_manual_login(org_uuid):
             login_user(invitee, remember=form.remember_me.data) # <-- CRUCIAL CHANGE
             session['user_role'] = "invitee"
             session['org_uuid'] = str(org.uuid)
-            flash('Login successful!', 'success')
+            # flash('Login successful!', 'success')
             db.session.commit()
         
         if invitee:
@@ -718,15 +698,16 @@ def invitee_manual_login(org_uuid):
 @app_.route('/<uuid:org_uuid>/logout')
 @login_required
 def logout(org_uuid):
+
     logout_user()
     flash('You have been logged out!', 'success')
+
     # Redirect based on the user type
     if hasattr(current_user, 'is_invitee') and current_user.is_invitee:
-        # Invitee → back to manual login page
         return redirect(url_for('inv.invitee_manual_login', org_uuid=org_uuid))
-    else:
-        # Admin/org-admin → normal admin login
-        return redirect(url_for('inv.login', org_uuid=org_uuid))
+    
+    # Admin / Org-admin
+    return redirect(url_for('inv.login', org_uuid=org_uuid))
 
 
 @app_.route('/logout')
@@ -735,7 +716,6 @@ def logout_super():
     logout_user()
     flash('You have been logged out!', 'success')
     return redirect(url_for('inv.super_login'))
-
 
 
 ######################...helper...#########################
@@ -794,7 +774,6 @@ def del_event_invitee(org_uuid, event_id, invitee_id):
     if not link:
         return jsonify({'status': 'error', 'message': 'Invitee not registered'}), 404
 
-
     if request.method == 'POST':
         try:
             csrf_token = request.headers.get('X-CSRFToken')
@@ -819,7 +798,6 @@ def del_event_invitee(org_uuid, event_id, invitee_id):
 
         
 # Delete completely
-
 @app_.route('/<uuid:org_uuid>/del_invitee/<int:invitee_id>', methods=['GET','POST'])
 @org_admin_or_super_required
 def del_invitee(org_uuid, invitee_id):
@@ -1272,155 +1250,6 @@ def generate_attendance_qr(org_uuid, event_id):
 
 
 ########################################
-# @app_.route('/<uuid:org_uuid>/register', methods=['GET', 'POST'])
-# def register(org_uuid):
-#     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
-
-#     # Only upcoming events
-#     upcoming_events = Event.query.filter(
-#         Event.organization_id == org.id,
-#         Event.start_time >= datetime.utcnow(),
-#         Event.is_active.is_(True),
-#         Event.status.in_(["upcoming", "pending"])
-#     ).order_by(Event.start_time).all()
-
-    
-#     form = InviteeForm()
-#     if form.state.data:
-#         form.lga.choices = [(lga, lga) for lga in fetch_lgas(form.state.data)]
-
-#     existing_invitee = None
-#     registered_event_ids = []
-
-#     # Prefill if existing
-#     if request.method == "GET":
-#         email = request.args.get("email")
-#         phone = request.args.get("phone")
-#         if email or phone:
-#             existing_invitee = Invitee.query.filter(
-#                 Invitee.organization_id == org.id,
-#                 or_(
-#                     Invitee.email == (email.lower() if email else None),
-#                     Invitee.phone_number == phone
-#                 )
-#             ).first()
-#             if existing_invitee:
-#                 form = InviteeForm(obj=existing_invitee)
-#                 registered_event_ids = [link.event_id for link in existing_invitee.event_links]
-
-#     if form.validate_on_submit():
-#         email = form.email.data.lower().strip()
-#         phone = form.phone_number.data.strip()
-#         # raw_phone = form.phone_number.data.strip()
-#         # phone = normalize_phone(raw_phone, default_country_code="+234")
- 
-
-#         invitee = Invitee.query.filter(
-#             Invitee.organization_id == org.id,
-#             or_(Invitee.email == email, Invitee.phone_number == phone)
-#         ).first()
-
-#         import secrets
-#             # Generate and hash temporary password
-#         temp_password = secrets.token_urlsafe(8)
-#         hashed_password = generate_password_hash(temp_password)
-        
-#         if invitee:
-#             # Update profile
-#             invitee.name = form.name.data.title()
-#             invitee.email = email
-#             invitee.phone_number = phone
-#             invitee.address = form.address.data
-#             invitee.state = form.state.data
-#             invitee.lga = form.lga.data
-#             invitee.gender = form.gender.data
-#             invitee.position = form.position.data.title()
-#         else:
-#             invitee = Invitee(
-#                 name=form.name.data.title(),
-#                 email=email,
-#                 phone_number=phone,
-#                 address=form.address.data,
-#                 state=form.state.data,
-#                 lga=form.lga.data,
-#                 gender=form.gender.data,
-#                 position=form.position.data.title(),
-#                 register_date=datetime.utcnow(),
-#                 organization_id=org.id
-#             )
-    
-
-#             # creating default password
-#             invitee.set_password(temp_password) # password temporarily
-#             db.session.add(invitee)
-#             db.session.flush()  # so invitee.id is available
-
-                  
-#         # Event registration
-#         event_id = request.form.get("event_id")
-#         if event_id:
-#             event = Event.query.get(int(event_id))
-#             if not event or event.organization_id != org.id or event.start_time < datetime.utcnow():
-#                 flash("Invalid or expired event selected.", "danger")
-#                 return redirect(url_for('inv.register', org_uuid=org.uuid))
-
-#             #  Check for duplicate using relationship
-#             already_registered = any(link.event_id == event.id for link in invitee.event_links)
-#             if already_registered:
-#                 s = get_serializer()
-#                 token = s.dumps({"invitee_id": invitee.id, "event_id": event.id})
-
-#                 flash(f"You are already registered for '{event.name}'.", "info")
-#                 return redirect(url_for("inv.success", org_uuid=org.uuid, token=token))
-
-#             # Create secure token
-#             s = get_serializer()
-#             token = s.dumps({"invitee_id": invitee.id, "event_id": event.id})
-
-#             # Create new registration
-           
-#             qr_url = url_for(
-#                 "inv.confirm_qr_code_self",
-#                 org_uuid=org.uuid,
-#                 token=token,
-#                 _external=True
-#             )
-
-#             link = EventInvitee(
-#                 event_id=event.id,
-#                 invitee_id=invitee.id,
-#                 status="accepted",
-#                 responded_at=datetime.utcnow(),
-#                 qr_code_path=qr_url
-#             )
-#             db.session.add(link)
-
-#             try:
-#                 db.session.commit()
-#                 send_qr_code_email(invitee, qr_url, org,temp_password)
-               
-#                 flash("Registration successful! Please check your email for the QR code.", "success")
-#             except Exception as e:
-#                 db.session.rollback()
-#                 current_app.logger.error(f"Registration failed: {e}")
-#                 flash("An error occurred during registration. Please Check your Internet and try again.", "danger")
-#                 return redirect(url_for('inv.register', org_uuid=org.uuid))
-
-#         return redirect(url_for("inv.success", org_uuid=org.uuid, token=token))
-
-#     elif request.method == "POST":
-#         current_app.logger.warning(f"Form validation failed: {form.errors}")
-
-#     return render_template(
-#         "register.html",
-#         form=form,
-#         org=org,
-#         org_uuid=org.uuid,
-#         upcoming_events=upcoming_events,
-#         existing_invitee=existing_invitee,
-#         registered_event_ids=registered_event_ids,
-#     )
-
 
 @app_.route('/<uuid:org_uuid>/register', methods=['GET', 'POST'])
 def register(org_uuid):
@@ -1462,13 +1291,15 @@ def register(org_uuid):
     if form.validate_on_submit():
         email = form.email.data.lower().strip()
         phone = form.phone_number.data.strip()
-        import secrets
+        
+
         temp_password = secrets.token_urlsafe(8)
 
         invitee = Invitee.query.filter(
             Invitee.organization_id == org.id,
             or_(Invitee.email == email, Invitee.phone_number == phone)
         ).first()
+
 
         if invitee:
             # Update existing invitee
@@ -1481,6 +1312,8 @@ def register(org_uuid):
             invitee.gender = form.gender.data
             invitee.position = form.position.data.title()
         else:
+
+ 
             # Create new invitee
             invitee = Invitee(
                 name=form.name.data.title(),
@@ -1494,7 +1327,9 @@ def register(org_uuid):
                 register_date=datetime.utcnow(),
                 organization_id=org.id
             )
+
             invitee.set_password(temp_password)
+
             db.session.add(invitee)
             db.session.flush()  # to get invitee.id
 
@@ -2365,12 +2200,11 @@ def show_invitee_event(org_uuid,event_id):
         org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
         event=Event.query.filter_by(id=event_id, organization_id=org.id).first_or_404()
 
-
     except ValueError: # This ValueError catch is for if org_uuid couldn't be converted to UUID type
         flash('Invalid organization identifier.', 'danger')
         return redirect(url_for('inv.universal_login')) # Redirect to universal login if UUID is invalid
 
-
+ 
     # --- Role-based access control (Refined) ---
     invitees_query = None # Initialize to None
 
@@ -2663,8 +2497,7 @@ def show_event_invitees(org_uuid):
         date_filter=date_filter,
     )
 
-# 
-
+################################### 
 @app_.route('/<uuid:org_uuid>/invitee_event_profile', methods=['GET'])
 @login_required
 @invitee_only
@@ -2728,7 +2561,7 @@ def invitee_event_profile(org_uuid):
         .options(joinedload(EventInvitee.event))
         .all()
     )
-
+    
     registered_event_ids = {link.event_id for link in registered_links}
     registered_events = [link.event for link in registered_links]
 
@@ -2744,7 +2577,6 @@ def invitee_event_profile(org_uuid):
         registered_events=registered_events,
         attended_events=attended_events,
     )
-
 
 
 #send qr to email
@@ -2853,55 +2685,118 @@ def send_qr_code_email(invitee, qr_url, org,temp_password):
 @app_.route('/<uuid:org_uuid>/export_invitees', methods=['GET'])
 @login_required
 def export_invitees(org_uuid):
-    if not current_user.can_export_invitees:
+
+    # Role access
+    if current_user.role not in ['super_admin', 'admin']:
         flash('Access denied. You are not authorized to export invitees.', 'danger')
-        return redirect(url_for('inv.login'))
+        return redirect(url_for('inv.login', org_uuid=org_uuid))
 
     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
 
-    invitees = []
-    pagination = None
+    if current_user.role == 'admin' and current_user.organization_id != org.id:
+        flash("Access denied. You cannot export another organisation's records.", "danger")
+        return redirect(url_for('inv.show_invitees', org_uuid=current_user.organization.uuid))
 
     try:
-        invitees_query = Invitee.query.filter_by(organization_id=org.id)
-
-        page = request.args.get('page', 1, type=int)
-        pagination = invitees_query.paginate(page=page, per_page=10)
-        invitees = pagination.items
+        # Fetch all invitees (NO PANDAS)
+        invitees = Invitee.query.filter_by(organization_id=org.id).all()
 
         if not invitees:
-            flash('No invitees found to export.', 'warning')
+            flash("No invitees found to export.", "warning")
             return redirect(url_for('inv.show_invitees', org_uuid=org.uuid))
 
-        # Prepare CSV data
+        # Convert to pure Python dict list (lightweight)
         data = [{
-            'Name': i.name or '',
-            'Phone': i.phone_number or '',
-            'Gender': i.gender or '',
-            'Email': i.email or '',
-            'State': i.state or '',
-            'LGA': i.lga or '',
-            'Position': i.position or '',
-            'Register Date': i.register_date.strftime('%Y-%m-%d') if i.register_date else '',
-            'Confirmed': i.confirmed if i.confirmed is not None else ''
+            'name': i.name,
+            'phone_number': i.phone_number,
+            'gender': i.gender,
+            'email': i.email,
+            'state': i.state,
+            'lga': i.lga,
+            'position': i.position,
+            'register_date': i.register_date.strftime('%Y-%m-%d') if i.register_date else None,
+            'confirmed': i.confirmed,
         } for i in invitees]
 
-        df = pd.DataFrame(data)
+        # Convert to JSON string (very lightweight)
+        json_data = json.dumps(data, indent=2)
 
-        # Convert DataFrame to CSV in memory
-        output = io.StringIO()
-        df.to_csv(output, index=False)
-        output.seek(0)
+        # Send download
+        filename = f"invitees_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
 
         return send_file(
-            io.BytesIO(output.getvalue().encode('utf-8')),
-            download_name=f"invitees_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv",
+            io.BytesIO(json_data.encode('utf-8')),
             as_attachment=True,
-            mimetype="text/csv"
+            download_name=filename,
+            mimetype='application/json'
         )
+
     except Exception as e:
-        flash(f'An error occurred while exporting data: {str(e)}', 'danger')
+        flash(f"Export error: {str(e)}", "danger")
         return redirect(url_for('inv.show_invitees', org_uuid=org.uuid))
+
+
+# .....................................
+
+@app_.route('/<uuid:org_uuid>/export_invitees/<int:event_id>', methods=['GET'])
+@login_required
+def export_event_invitee(org_uuid, event_id):
+
+    # Role access
+    if current_user.role not in ['super_admin', 'admin']:
+        flash('Access denied. You are not authorized to export invitees.', 'danger')
+        return redirect(url_for('inv.login', org_uuid=org_uuid))
+
+    org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+
+    if current_user.role == 'admin' and current_user.organization_id != org.id:
+        flash("Access denied. You cannot export another organisation's records.", "danger")
+        return redirect(url_for('inv.show_invitee_event', org_uuid=current_user.organization.uuid))
+
+    event = Event.query.filter_by(id=event_id, organization_id=org.id).first_or_404()
+
+    try:
+        # FETCH ONLY INVITEES FOR THIS EVENT
+        event_links = EventInvitee.query.filter_by(event_id=event.id).all()
+
+        if not event_links:
+            flash("No invitees found for this event.", "warning")
+            return redirect(url_for('inv.show_invitee_event', org_uuid=org.uuid))
+
+        # Create list of dicts for export
+        data = []
+        for link in event_links:
+            invitee = link.invitee
+            data.append({
+                'name': invitee.name,
+                'phone_number': invitee.phone_number,
+                'gender': invitee.gender,
+                'email': invitee.email,
+                'state': invitee.state,
+                'lga': invitee.lga,
+                'position': invitee.position,
+                'register_date': invitee.register_date.strftime('%Y-%m-%d') if invitee.register_date else None,
+              # FIXED fields (must come from invitee)
+                'confirmed': invitee.confirmed,
+                'confirmation_date': invitee.confirmation_date.strftime('%Y-%m-%d %H:%M')
+                    if invitee.confirmation_date else None,
+            })
+
+        # Convert to JSON (lightweight)
+        json_data = json.dumps(data, indent=2)
+
+        filename = f"event_{event.id}_invitees_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+
+        return send_file(
+            io.BytesIO(json_data.encode('utf-8')),
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/json'
+        )
+
+    except Exception as e:
+        flash(f"Export error: {str(e)}", "danger")
+        return redirect(url_for('inv.show_invitee_event', org_uuid=org.uuid))
 
 
 ######################################################
@@ -2952,7 +2847,19 @@ def register_admin(org_uuid):
             db.session.add(new_admin)
             db.session.commit()
 
-            send_admin_login_link(new_admin, org)
+
+             # readable role label
+            readable_role = readable_role_label(role)
+
+             # Send admin invitation email
+            send_admin_invite_email(
+                email=new_admin.email,
+                name=new_admin.name,
+                role=readable_role,
+                temp_password=password,  # pass the password just set
+                organization_name=org.name
+            )
+
             log_action('add', user_id=current_user.id, record_type='Admin', record_id=new_admin.id, associated_org_id=org.id)
             flash(f"Admin '{new_admin.name}' registered successfully.", "success")
             return redirect(url_for('admin.management_dashboard', org_uuid=org.uuid))
@@ -2966,58 +2873,6 @@ def register_admin(org_uuid):
 
 
 #............edit function....................
-
-# @app_.route('/<uuid:org_uuid>/edit_admin/<int:id>', methods=['GET', 'POST'])
-# @admin_or_super_required
-# def edit_admin(org_uuid, id):
-#     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
-#     admin = Admin.query.filter_by(id=id, organization_id=org.id).first_or_404()
-#     org_locations = Location.query.filter_by(organization_id=org.id).all()
-
-#     if request.method == 'POST':
-#         new_name = request.form.get('name', '').strip()
-#         new_email = request.form.get('email', '').strip().lower()
-#         new_password = request.form.get('password', '').strip()
-#         new_gender = request.form.get('gender', '').strip()
-#         new_phone_number = request.form.get('phone_number', '').strip()
-#         new_location_id = request.form.get('location_id', '').strip() or None
-#         new_location_id = int(new_location_id) if new_location_id else None
-
-#         existing_admin = Admin.query.filter_by(email=new_email, organization_id=org.id).first()
-#         if existing_admin and existing_admin.id != admin.id:
-#             flash('An admin with this email already exists.', 'danger')
-#             return redirect(url_for('inv.edit_admin', id=admin.id, org_uuid=org.uuid))
-
-#         if new_password:
-#             if len(new_password) < 6:
-#                 flash('Password must be at least 6 characters long.', 'danger')
-#                 return redirect(url_for('inv.edit_admin', id=admin.id, org_uuid=org.uuid))
-#             admin.set_password(new_password)
-
-#         admin.name = new_name
-#         admin.email = new_email
-#         admin.phone_number = new_phone_number
-#         admin.gender = new_gender
-
-#         # only assign location if role is location_admin
-#         if admin.role == 'location_admin':
-#             admin.location_id = new_location_id
-
-#         admin.updated_at = datetime.utcnow()
-
-#         try:
-#             db.session.commit()
-#             log_action('edit', user_id=current_user.id if current_user.is_authenticated else None,
-#                        record_type='Admin', record_id=admin.id, associated_org_id=org.id)
-#             flash('Admin updated successfully!', 'success')
-#             return redirect(url_for('inv.manage_admin', org_uuid=org.uuid))
-#         except Exception as e:
-#             db.session.rollback()
-#             current_app.logger.exception("Error updating admin")
-#             flash(f'An error occurred: {e}', 'danger')
-#             return render_template('edit_admin.html', admin=admin, org=org, org_locations=org_locations)
-
-#     return render_template('edit_admin.html', admin=admin, org=org, org_locations=org_locations)
 
 @app_.route('/<uuid:org_uuid>/edit_admin/<int:id>', methods=['GET', 'POST'])
 @admin_or_super_required
@@ -3108,19 +2963,53 @@ def edit_admin(org_uuid, id):
 
 
 
-@app_.route('/<uuid:org_uuid>/profile', methods=['GET', 'POST'])
-@admin_or_super_required
-def view_admin(org_uuid):
+# @app_.route('/<uuid:org_uuid>/profile', methods=['GET', 'POST'])
+# # @admin_or_super_required
+# def view_admin(org_uuid):
 
-    # Get the organization using UUID
-    org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+#     # Get the organization using UUID
+#     org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
     
-    if not current_user.is_super_admin:
-        if current_user.organization_id != org.id:
-            flash("You are not authorized to view this profile","danger")
-            return redirect(url_for('inv.universal_login',org=org))
-    return render_template("view_admin.html", org=org, admin=current_user)
+#     if not current_user.is_super_admin:
+#         if current_user.organization_id != org.id:
+#             flash("You are not authorized to view this profile","danger")
+#             return redirect(url_for('inv.universal_login',org=org))
+#     return render_template("view_admin.html", org=org, admin=current_user)
         
+
+@app_.route('/<uuid:org_uuid>/profile', methods=['GET', 'POST'])
+@login_required
+def view_profile(org_uuid):
+    org = Organization.query.filter_by(uuid=org_uuid).first_or_404()
+
+    # Only allow users from this organization
+    if current_user.organization_id != org.id:
+        flash("You are not authorized to view this profile", "danger")
+        return redirect(url_for('inv.universal_login'))
+
+    if request.method == "POST":
+        file = request.files.get('profile_image')
+        if file and Config.allowed_file(file.filename):
+            prefix = f"user_{current_user.id}_"
+            saved_filename = Config.save_uploaded_image(file, prefix=prefix)
+            if saved_filename:
+                # Update the correct DB field
+                if isinstance(current_user, Admin):
+                    current_user.admin_img = saved_filename
+                elif isinstance(current_user, Invitee):
+                    current_user.invitee_img = saved_filename
+
+                db.session.commit()
+                flash("Profile image updated successfully!", "success")
+            else:
+                flash("Failed to save image.", "danger")
+        else:
+            flash("Invalid file or no file selected.", "warning")
+
+        return redirect(url_for('inv.view_profile', org_uuid=org.uuid))
+
+    return render_template("view_profile.html", org=org, user=current_user)
+
 
 # ............delete function..................
 
@@ -3206,6 +3095,73 @@ def manage_admin(org_uuid):
     return render_template('del_admin.html', org=org, org_uuid=org.uuid,
                             admins=admins, pagination=pagination, search=search)
   
+
+
+@app_.route('/<org_uuid>/accept-invitation/<token>', methods=['GET', 'POST'])
+def accept_invitation(org_uuid, token):
+
+    invitation = Invitation.query.options(
+        db.joinedload(Invitation.organization)
+    ).filter_by(token=token).first_or_404()
+
+    form = ResetPasswordForm()
+    org = invitation.organization
+
+    if not org:
+        flash("This invitation has no valid organization linked.", "danger")
+        return redirect(url_for("inv.login", org_uuid=org_uuid))
+
+    # --- IMPORTANT FIX ---
+    # If the invitation is already accepted, don't flash outdated org message
+    if invitation.status == "accepted":
+        flash("This account has already been activated. Please log in.", "info")
+        return redirect(url_for("inv.login", org_uuid=org.uuid))
+    
+
+    # FIX: Correct UUID mismatch check
+    # if org_uuid != org.uuid:
+    #     flash("The link had an outdated organization reference. Continuing safely.", "success")
+    #     org_uuid = org.uuid   # normalize instead of redirect
+
+    if invitation.is_expired():
+        flash("This invitation link has expired.", "danger")
+        return redirect(url_for("inv.login", org_uuid=org_uuid))
+
+    # CHECK IF ADMIN ALREADY EXISTS → prevent IntegrityError
+    existing_admin = Admin.query.filter_by(
+        email=invitation.email,
+        organization_id=invitation.organization_id
+    ).first()
+
+    if existing_admin:
+        flash("This account has already been activated. Please log in.", "info")
+        return redirect(url_for("inv.login", org_uuid=org_uuid))
+
+    if form.validate_on_submit():
+
+        admin = Admin(
+            email=invitation.email,
+            role=invitation.role,
+            organization_id=invitation.organization_id
+        )
+        admin.set_password(form.password.data)
+
+        db.session.add(admin)
+        invitation.status = "accepted"
+        db.session.commit()
+
+        flash("Account created successfully. You can now log in.", "info")
+        return redirect(url_for("inv.login", org_uuid=org_uuid))
+
+    return render_template(
+        "accept_invite.html",
+        form=form,
+        invitation=invitation,
+        org=org,
+        organization_name=org.name,
+        role=invitation.role.replace("_", " ").title(),
+    )
+
 
 @app_.route('/<uuid:org_uuid>/action_logs', methods=['GET'])
 @super_required

@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}Profile | Dashboard{% endblock %}
+{% block header_title %}Preview Profile — {{ org.name }} {% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-info text-white text-center py-3">
+                    <h4 class="mt-2">
+                        <i class="bi bi-person-circle me-2"></i>
+                        Profile
+                    </h4>
+                </div>
+                <div class="card-body px-4 py-4">
+
+                    <!-- Flash messages -->
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <!-- Profile Image (clickable for Invitees) -->
+                    <div class="text-center mb-4">
+                        {% if user.is_invitee %}
+                        <form method="POST" enctype="multipart/form-data">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <label for="profile_image" style="cursor: pointer;">
+                                {% if user.invitee_img %}
+                                    <img src="{{ url_for('static', filename='images/' ~ user.invitee_img) }}" 
+                                         alt="Profile" class="rounded-circle" width="100" height="100" id="profilePreview">
+                                {% else %}
+                                    <i class="bi bi-person-circle text-primary" style="font-size: 5rem;" id="profilePreviewIcon"></i>
+                                {% endif %}
+                            </label>
+                            <input type="file" class="d-none" id="profile_image" name="profile_image" accept="image/*" onchange="previewAndSubmit(this)">
+                        </form>
+                        {% else %}
+                            {% if user.invitee_img %}
+                                <img src="{{ url_for('static', filename='images/' ~ user.invitee_img) }}" 
+                                     alt="Profile" class="rounded-circle" width="150" height="150">
+                            {% else %}
+                                <i class="bi bi-person-circle text-primary" style="font-size: 5rem;"></i>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+
+                    <!-- Profile Details -->
+                    <div class="admin-details mt-4">
+                        <!-- Name -->
+                        <div class="detail-item mb-3 p-3 bg-light rounded">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-person-fill text-primary me-3" style="font-size: 1.2rem;"></i>
+                                <div>
+                                    <label class="form-label fw-bold mb-1 text-muted">Name</label>
+                                    <div class="detail-value">{{ user.name }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Email -->
+                        <div class="detail-item mb-3 p-3 bg-light rounded">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-envelope-fill text-primary me-3" style="font-size: 1.2rem;"></i>
+                                <div>
+                                    <label class="form-label fw-bold mb-1 text-muted">Email</label>
+                                    <div class="detail-value">{{ user.email }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Role -->
+                        <div class="detail-item mb-3 p-3 bg-light rounded">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-shield-check text-primary me-3" style="font-size: 1.2rem;"></i>
+                                <div>
+                                    <label class="form-label fw-bold mb-1 text-muted">Role</label>
+                                    <div class="detail-value">
+                                        {% if user.role == 'location_admin' %}
+                                            <span class="badge bg-success">Location Admin</span>
+                                        {% elif user.role == 'org_admin' %}
+                                            <span class="badge bg-primary">Organization Admin</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ user.role }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Assigned Location -->
+                        {% if user.role == 'location_admin' %}
+                        <div class="detail-item mb-3 p-3 bg-light rounded">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-geo-alt-fill text-primary me-3" style="font-size: 1.2rem;"></i>
+                                <div>
+                                    <label class="form-label fw-bold mb-1 text-muted">Assigned location</label>
+                                    <div class="detail-value">
+                                        {% if user.location %}
+                                            <span class="badge bg-primary">{{ user.location.name }}</span>
+                                        {% else %}
+                                            <span class="text-muted">No location assigned</span>
+                                        {% endif %}
+                                        <p><small><i>Last Updated: {{ user.updated_at.strftime("%Y-%m-%d %H:%M") if user.updated_at else "N/A" }}</i></small></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Password -->
+                        <div class="detail-item mb-3 p-3 bg-light rounded">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-key-fill text-primary me-3" style="font-size: 1.2rem;"></i>
+                                <div>
+                                    <label class="form-label fw-bold mb-1 text-muted">Password</label>
+                                    <div class="detail-value text-muted">
+                                        <i class="bi bi-lock-fill me-1"></i>
+                                        ••••••••••
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                <div class="d-flex justify-content-center gap-2 mt-4">
+                    {% if user.is_invitee %}
+                        <a href="{{ url_for('inv.invitee_event_profile', org_uuid=org.uuid) }}" class="btn btn-secondary">
+                            <i class="bi bi-arrow-left me-2"></i>Back
+                        </a>
+                    {% else %}
+                        <a href="{{ url_for('inv.show_event_invitees', org_uuid=org.uuid) }}" class="btn btn-secondary">
+                            <i class="bi bi-arrow-left me-2"></i>Back to Event
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.detail-item {
+    transition: all 0.3s ease;
+    border-left: 4px solid transparent;
+}
+.detail-item:hover {
+    border-left-color: #0d6efd;
+    background-color: #f8f9fa !important;
+}
+.detail-value {
+    font-size: 1.1rem;
+    color: #333;
+    font-weight: 500;
+}
+.profile-image-container {
+    position: relative;
+    display: inline-block;
+}
+.admin-details {
+    max-width: 100%;
+}
+@media (max-width: 576px) {
+    .detail-item {
+        padding: 1rem !important;
+    }
+    .detail-item .d-flex {
+        flex-direction: column;
+        align-items: flex-start !important;
+    }
+    .detail-item i {
+        margin-bottom: 0.5rem;
+        margin-right: 0 !important;
+    }
+}
+</style>
+
+<script>
+function previewAndSubmit(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = document.getElementById('profilePreview');
+            if(img){
+                img.src = e.target.result;
+            } else {
+                // fallback if admin had dummy icon
+                const icon = document.getElementById('profilePreviewIcon');
+                if(icon){
+                    icon.style.display = 'none';
+                    const image = document.createElement('img');
+                    image.src = e.target.result;
+                    image.id = 'profilePreview';
+                    image.className = 'rounded-circle';
+                    image.width = 150;
+                    image.height = 150;
+                    icon.parentNode.appendChild(image);
+                }
+            }
+        };
+        reader.readAsDataURL(input.files[0]);
+        // auto-submit the form
+        input.form.submit();
+    }
+}
+</script>
+
+{% endblock %}

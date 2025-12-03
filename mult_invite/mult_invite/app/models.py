@@ -58,23 +58,47 @@ DEFAULT_ADMIN_PASSWORD = os.getenv('DEFAULT_ADMIN_PASSWORD')
  
 
  
+# @login_manager.user_loader
+# def load_user(user_id):
+#     """
+#     Dynamically load either an Admin or an Invitee based on session.
+#     """
+#     role = session.get("user_role")  # check who logged in
+
+#     if role == "admin":
+#         return Admin.query.get(int(user_id))
+#     elif role == "invitee":
+#         return Invitee.query.get(int(user_id))
+
+#     # fallback — check both if no role found in session
+#     user = Admin.query.get(int(user_id))
+#     if not user:
+#         user = Invitee.query.get(int(user_id))
+#     return user
+
+
 @login_manager.user_loader
 def load_user(user_id):
-    """
-    Dynamically load either an Admin or an Invitee based on session.
-    """
-    role = session.get("user_role")  # check who logged in
+    role = session.get("user_role")
 
     if role == "admin":
         return Admin.query.get(int(user_id))
-    elif role == "invitee":
+
+    if role == "invitee":
         return Invitee.query.get(int(user_id))
 
-    # fallback — check both if no role found in session
-    user = Admin.query.get(int(user_id))
-    if not user:
-        user = Invitee.query.get(int(user_id))
-    return user
+    # absolute fallback to avoid crashes
+    admin = Admin.query.get(int(user_id))
+    if admin:
+        session["user_role"] = "admin"
+        return admin
+
+    invitee = Invitee.query.get(int(user_id))
+    if invitee:
+        session["user_role"] = "invitee"
+        return invitee
+
+    return None
 
 
 def create_default_admin():
@@ -118,6 +142,7 @@ def create_default_admin():
 
 # decorators..................
 # ------------------- Admin or Super Required -------------------
+
 def admin_or_super_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -157,20 +182,50 @@ def org_admin_or_super_required(f):
     return decorated_function
 
 
+
 # ------------------- Super Admin Only -------------------
 def super_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated:
-            flash("Please log in to access this page.", "info")
-            return redirect(url_for('inv.login', org_uuid=''))
 
-        if not current_user.is_super_admin:
-            flash("Super admin access required.", "danger")
-            return redirect(url_for('inv.login', org_uuid=''))
+        # 1. Must be logged in
+        if not current_user.is_authenticated:
+            return _unauthorized_api_or_page()
+
+        # 2. Must be super admin
+        if not getattr(current_user, "is_super_admin", False):
+            return _unauthorized_api_or_page()
 
         return f(*args, **kwargs)
+
     return decorated_function
+
+
+
+def _unauthorized_api_or_page():
+    """
+    Detect if request is JSON/API, return JSON.
+    Otherwise, redirect to login page.
+    """
+
+    # If request came from fetch() or Axios => request.is_json or Accept: application/json
+    wants_json = (
+        request.is_json
+        or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or "application/json" in request.headers.get("Accept", "")
+    )
+
+    if wants_json:
+        # API response
+        return jsonify({
+            "status": "error",
+            "message": "Super admin access required."
+        }), 403
+
+    # Webpage route
+    flash("Super admin access required.", "danger")
+    return redirect(url_for("inv.login", org_uuid=""))
+
 
 
 def invitee_only(f):
@@ -212,6 +267,7 @@ def is_authorized_user(current_user, org, event=None):
 
     # Default → not authorized
     return False, "unauthorized"
+
 
 
 ROLE_LABELS = {
@@ -334,15 +390,16 @@ class Invitee(UserMixin,RoleSafetyMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=True)
     email = db.Column(db.String(100), nullable=True)
-    phone_number = db.Column(db.String(15), nullable=False)
+    phone_number = db.Column(db.String(15), nullable=True)
     state = db.Column(db.String(100), nullable=True)
     lga = db.Column(db.String(100), nullable=True)
     address = db.Column(db.String(200))
     gender = db.Column(db.String(100), nullable=True)
-    position = db.Column(db.String(50), nullable=False)
+    position = db.Column(db.String(50), nullable=True)
     password_hash = db.Column(db.String(255), nullable=True) #reguired null=false
     is_active = db.Column(db.Boolean, default=True)  # New field for views
     
+    invitee_img = db.Column(db.String(255), nullable=True)  # Optional logo
     register_date = db.Column(db.DateTime, nullable=True)
     deleted = db.Column(db.Boolean, default=False)
     confirmed = db.Column(db.String(20), default='Absent')  # New field to track confirmation
@@ -556,6 +613,7 @@ class Event(db.Model):
             'created_at': self.created_at.isoformat()
         }
 
+
 class Invitation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), nullable=False)
@@ -692,6 +750,11 @@ class InviteeForm(FlaskForm):
     address = StringField('Residential Address', validators=[DataRequired()])
     phone_number = StringField('Phone Number', validators=[DataRequired(message="Phone number is required."), 
                     Length(min=11, max=15), Regexp(regex=r'^(\+?[1-9]\d{7,14}|0\d{7,14})$', message="Phone number must be valid")])
+
+    invitee_img = FileField('Upload Image', validators=[Optional(),
+        FileAllowed(['jpg', 'jpeg','png', 'gif'], 'Only .jpeg, .jpg, .png, and .gif formats are allowed'), 
+        FileSize(max_size=0.5 * 1024 * 1024, message='File size exceeds 500kb')])
+
 
     password = PasswordField('Password', validators=[
         Optional(),

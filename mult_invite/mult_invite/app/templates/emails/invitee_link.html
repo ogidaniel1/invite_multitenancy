@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Your Login Access – {{ organization_name }}</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #f7f9fc;
+        margin: 0;
+        padding: 0;
+        color: #333;
+      }
+      .container {
+        max-width: 600px;
+        margin: 40px auto;
+        background: #ffffff;
+        border-radius: 8px;
+        padding: 30px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      }
+      h2 {
+        color: #2c3e50;
+        margin-bottom: 20px;
+      }
+      p {
+        line-height: 1.6;
+        margin: 12px 0;
+      }
+      .btn {
+        display: inline-block;
+        margin-top: 20px;
+        padding: 12px 20px;
+        background-color: #007bff;
+        color: #fff !important;
+        text-decoration: none;
+        border-radius: 6px;
+        font-weight: bold;
+        transition: background 0.2s;
+      }
+      .btn:hover {
+        background-color: #0056b3;
+      }
+      .footer {
+        margin-top: 30px;
+        font-size: 12px;
+        color: #777;
+        text-align: center;
+      }
+      .password-box {
+        background: #f1f4f9;
+        padding: 12px;
+        border-radius: 6px;
+        font-weight: bold;
+        text-align: center;
+        margin: 15px 0;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <h2>Hello {{ invitee.name }} 🎉</h2>
+
+      <p>
+        Your access has been created under the organization:
+        <strong>{{ organization_name|title }}</strong>.
+      </p>
+
+      {% if temp_password %}
+      <p>Your temporary login password is shown below:</p>
+
+      <div class="password-box">
+        {{ temp_password }}
+      </div>
+
+      <p>Please remember to change your password after logging in.</p>
+      {% endif %}
+
+      <p>
+        Click the button below to access your event or dashboard:
+      </p>
+
+      <p style="text-align: center;">
+        <a href="{{ invitation_link }}" target="_blank" class="btn">Login Now</a>
+      </p>
+
+      <p>This link will expire in <strong>1 hour</strong>.</p>
+
+      <p>We look forward to having you onboard!</p>
+
+      <div class="footer">
+        Regards,<br />
+        <strong>The {{ organization_name|upper }} Team</strong>
+      </div>
+    </div>
+  </body>
+</html>

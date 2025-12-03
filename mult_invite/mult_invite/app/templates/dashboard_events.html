@@ -117,8 +117,8 @@
         <div class="d-flex align-items-center mt-2">
           <div class="d-flex">
             {% for link in invitees %}
-            <img src="{{ link.invitee.profile_image or url_for('static', filename='images/'~ org.logo_url) }}"
-              alt="Attendees image" class="rounded-circle border border-white"
+           <img src="{% if link.invitee.invitee_img %}{{ url_for('static', filename='images/' ~ link.invitee.invitee_img) }}{% else %}{{ url_for('static', filename='images/' ~ (org.logo_url or 'default.png')) }}{% endif %}"
+               alt="Attendees image" class="rounded-circle border border-white"
               style="width:32px; height:32px; object-fit:cover; {% if not loop.first %} margin-left:-12px; {% endif %} z-index: {{loop.revindex}};"
               title="{{ link.invitee.name }}">
             {% endfor %}

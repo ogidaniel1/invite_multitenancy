@@ -20,95 +20,36 @@ mail = Mail() # Initialize Flask-Mail in your __init__.py/app.py
 # then create_app().app_context().push() if calling outside a request context.
 # Or, configure SECRET_KEY in your Flask app config. ---
 
-def generate_reset_token(email):
-    """Generates a time-limited token for password reset."""
-    serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
-    # Token valid for 1 hour (3600 seconds)
-    return serializer.dumps(email, salt='password-reset-salt')
+def generate_admin_token(email):
+    s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    return s.dumps(email, salt="admin-login-salt")
 
-
-def verify_reset_token(token, expiration=3600):
-    """Verifies a password reset token and returns the email if valid."""
+def verify_admin_token(token, expiration=3600):
     serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
     try:
-        email = serializer.loads(token,salt='password-reset-salt', max_age=expiration
-        )
-    except Exception: # SignatureExpired, BadTimeSignature, etc.
+        return serializer.loads(token, salt="admin-login-salt", max_age=expiration)
+    except Exception:
         return None
-    return email
 
+
+def generate_invitee_token(email):
+    serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    return serializer.dumps(email, salt="invitee-login-salt")
+
+def verify_invitee_token(token, expiration=3600):
+    serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    try:
+        return serializer.loads(token, salt="invitee-login-salt", max_age=expiration)
+    except Exception:
+        return None
 
 
 #for new admin login...
-# def send_admin_login_link(admin,org):
 
-#     org = Organization.query.get(admin.organization_id)
-#     if not org:
-#         raise ValueError ("Organization not found")
-    
-#     sender = getattr(org, "email",current_app.config['MAIL_USERNAME'])
 
-#     token=generate_reset_token(admin.email)
-#     login_url= url_for('inv.login_with_token', token=token, _external=True)
-#     try:
-#         # HTML version
-#         html_body = render_template(
-#                 "emails/welcome_admin.html",
-#                 admin=admin,
-#                 org=org,
-#                 login_url=login_url
-#             )
-        
-#         send_async_email(
-#             subject= f"Welcome! your Admin access to {org.name.upper()}",
-#             recipients=[admin.email],
-#             html_body=html_body,
-#             sender=sender
-#         )
-      
-#     except Exception as e:
-#         print(f"Error sending email: {e}")
-#         raise
-
-def send_admin_login_link(admin, org=None):
-    # lazy imports
-    from app.models import Organization
-   
-    # ensure org instance
-    if not org:
-        org = Organization.query.get(admin.organization_id)
-    if not org:
-        raise ValueError("Organization not found")
-
-    sender = getattr(org, "email", None) or current_app.config.get('MAIL_DEFAULT_SENDER') or current_app.config.get('MAIL_USERNAME')
-
-    token = generate_reset_token(admin.email)
-    # This route logs in via token and redirects to org pages
-    login_url = url_for('inv.login_with_token', token=token, _external=True)
-
-    html_body = render_template(
-        "emails/welcome_admin.html",
-        admin=admin,
-        org=org,
-        login_url=login_url
-    )
-
-    try:
-        send_async_email(
-            subject=f"Welcome! Your Admin access to {org.name}",
-            sender=sender,
-            recipients=[admin.email],
-            html_body=html_body
-        )
-        current_app.logger.info("Admin login link sent to %s", admin.email)
-        return True
-    except Exception as exc:
-        current_app.logger.error("Error sending admin email: %s", exc)
-        return False
-
+#################################################
 
 # send confirm mail
-
 def send_confirm_email(invitee, event, org):
     sender_email = getattr(org, "email", None) or "noreply@noreply.com"
     try:
@@ -132,78 +73,106 @@ def send_confirm_email(invitee, event, org):
         raise
 
 
+# for invitee api invites..........
 
-def send_invitation_email(invitation_id,msg_data):
-    
-    from app.models import Invitation,db
-    """
-    Sends an invitation email to a user asynchronously.
-    Args:
-        invitation_id: The ID of the Invitation object to send an email for.
-    """
-    # Re-fetch the invitation object within the current app context for robustness.
-    # Eager load the organization relationship.
-    invitation = db.session.query(Invitation).options(joinedload(Invitation.organization)).get(invitation_id)
+def send_invitee_invitation_email(invitee_id, temp_password=None):
+    from app.models import Invitee, Organization, db
 
-    if not invitation:
-        current_app.logger.error(f"Invitation with ID {invitation_id} not found for email sending.")
-        # Raise an error, as we can't send an email for a non-existent invitation
-        raise ValueError(f"Invitation with ID {invitation_id} not found.")
+    invitee = Invitee.query.options(joinedload(Invitee.organization)).get(invitee_id)
+    if not invitee:
+        raise ValueError(f"Invitee with ID {invitee_id} not found.")
 
-    try:
-        invitation_link = url_for('inv.invitation_confirm', token=invitation.token, _external=True)
-    except Exception as e:
-        current_app.logger.error(f"Error generating invitation URL for {invitation.email}: {e}")
-        # Re-raise the error for the calling function to catch
-        raise ValueError(f"Could not generate invitation URL: {e}")
+    invitation_link = url_for('inv.invitee_manual_login',org_uuid=invitee.organization.uuid,
+        _external=True)
 
     sender_info = current_app.config.get('MAIL_DEFAULT_SENDER')
-    if isinstance(sender_info, tuple) and len(sender_info) == 2:
-        sender_for_message = sender_info
-    else:
-        sender_for_message = current_app.config.get('MAIL_USERNAME')
+    sender_for_message = sender_info if isinstance(sender_info, tuple) else current_app.config.get('MAIL_USERNAME')
 
-    # Conditionally determine organization name for subject and template
-    display_organization_name = invitation.organization.name if invitation.organization else None
+    organization_name = invitee.organization.name if invitee.organization else "Our Platform"
 
-    # Adjust subject line based on whether an organization is present
-    if display_organization_name:
-        subject = f"You're Invited to Join {display_organization_name} as a {invitation.role.replace('_', ' ').title()}"
-    else:
-        # Generic subject for admin or non-organization-specific invitations
-        subject = f"You're Invited to Join {display_organization_name} as a {invitation.role.replace('_', ' ').title()}"
+    subject = f"Your Login Credentials for {organization_name}"
 
-    try:
-    # Render HTML content for the email body
-        html_body = render_template('emails/invitation_email.html',
-                                invitation=invitation, # Pass the invitation object
-                                invitation_link=invitation_link,
-                                organization_name=display_organization_name, # Pass the (potentially None) display name
-                                role=invitation.role.replace('_', ' ').title(),
-                                now=datetime.utcnow # Pass datetime.utcnow for {{ now().year }}
-                                )
+    html_body = render_template(
+        'emails/invitee_link.html',
+        invitee=invitee,
+        invitation_link=invitation_link,
+        organization_name=organization_name,
+        temp_password=temp_password,
+        now=datetime.utcnow
+    )
 
-        # Prepare data to be sent to the async thread.
-        # We pass minimal, serializable data. The actual Message object is built in the async thread.
-        send_async_email({
-            'subject': subject,
-            'sender': sender_for_message,
-            'recipients': [invitation.email],
-            'html_body': html_body
-        })
-        
-        current_app.logger.info(f"Invitation email queued for {invitation.email}.")
+    send_async_email(
+    subject=subject,
+    recipients=[invitee.email],
+    html_body=html_body,
+    sender=sender_for_message
+    )
 
-    except Exception as e:
-        current_app.logger.info(f"Invitation Failed")
+    current_app.logger.info(f"Invitee login email queued for {invitee.email}.")
 
 
 
-    # Queue the email sending to run in a separate thread
-    # The `_get_current_object()` is essential for passing the current app context to the new thread.
-    # Thread(target=_send_async_email, args=(current_app._get_current_object(), msg_data)).start()
+# for tracking pending or accep(admin or invitee, anybody)
+def send_invitation_email(invitation_id):
+    from app.models import Invitation, db
 
-    # current_app.logger.info(f"Invitation email queued for {invitation.email}.")
+    invitation = db.session.query(Invitation).options(
+        joinedload(Invitation.organization)
+    ).get(invitation_id)
+
+    if not invitation:
+        raise ValueError(f"Invitation with ID {invitation_id} not found.")
+
+    # Safe organization reference
+    org = invitation.organization
+
+        # Fallback if no org linked
+    org_uuid = org.uuid if org else "unknown"
+    organization_name = org.name if org else "Our Platform"
+    # org_uuid = org.uuid if org else "default-uuid"  # Replace with default if needed
+
+    # Only admin login link
+    invitation_link = url_for(
+        "inv.accept_invitation",
+        org_uuid=org_uuid,
+        token=invitation.token,
+        _external=True
+    )
+
+    # Determine sender email
+    sender_info = current_app.config.get('MAIL_DEFAULT_SENDER')
+    sender_for_message = (
+        sender_info if isinstance(sender_info, tuple)
+        else current_app.config.get('MAIL_USERNAME')
+    )
+
+    # Format role nicely
+    role_title = invitation.role.replace('_', ' ').title()
+
+    # Email subject
+    subject = f"You're Invited to Join {organization_name} as a {role_title}"
+
+    # Render template safely (pass organization_name explicitly)
+    html_body = render_template(
+        'emails/invitation_email.html',
+        invitation=invitation,
+        invitation_link=invitation_link,
+        organization_name=organization_name,
+        # organization_name=org.name if org else "Our Platform",
+        role=role_title,
+        org=org,
+        now=datetime.utcnow
+    )
+
+    # Send email asynchronously
+    send_async_email(
+        subject=subject,
+        recipients=[invitation.email],
+        html_body=html_body,
+        sender=sender_for_message
+    )
+
+    current_app.logger.info(f"Invitation email queued for {invitation.email}.")
 
 
 
@@ -224,7 +193,7 @@ def send_admin_invite_email(email, name,role, temp_password, organization_name):
              current_app.config.get("MAIL_DEFAULT_SENDER") or \
              current_app.config['MAIL_USERNAME']
 
-    # NEW: Login URL
+    # NEW: Login for admins
     login_url = url_for("inv.login", org_uuid=org.uuid, _external=True)
 
     try:

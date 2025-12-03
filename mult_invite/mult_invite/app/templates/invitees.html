@@ -92,8 +92,8 @@
                                     <i class="bi bi-person-plus-fill"></i> Manage all Invitees
                                 </a>
                             
-                                {% if current_user.can_export_invitees %}
-                                <a href="{{ url_for('inv.export_invitees', org_uuid=org.uuid, invitees=invitees, pagination=pagination) }}"
+                                 {% if current_user.is_super_admin %}
+                                <a href="{{ url_for('inv.export_invitees', org_uuid=org.uuid) }}"
                                     class="btn btn-primary">
                                     <i class="bi bi-file-earmark-excel"></i> Export
                                 </a>
@@ -156,7 +156,7 @@
                                     <td class="fw-medium">{{ invitee.name }}</td>
                                     <td>{{ invitee.position }}</td>
                                     <td>{{ invitee.phone_number }}</td>
-                                    <td>{{ invitee.state.upper() }}</td>
+                                    <td>{{ invitee.state|upper }}</td>
                                     <td>{{ invitee.lga }}</td>
                                     <td>
                                         {% if invitee.confirmed == 'Present' %}

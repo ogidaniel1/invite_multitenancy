@@ -33,6 +33,12 @@
             <div class="button-container">
                 <a href="{{ invitation_link }}" class="button">Accept Invitation</a>
             </div>
+            
+            {% if temp_password %}
+            <p>Your temporary password is: <strong>{{ temp_password }}</strong></p>
+            <p>Use this password to log in at <a href="{{ invitation_link }}">{{ invitation_link }}</a> and change it immediately after first login.</p>
+            {% endif %}
+
             <p>Alternatively, you can copy and paste the following link into your browser:</p>
             <p><a href="{{ invitation_link }}">{{ invitation_link }}</a></p>
             <p>This invitation will expire on {{ invitation.expires_at.strftime('%Y-%m-%d %H:%M UTC') }}.</p>
